@@ -174,6 +174,24 @@ describe('interdepartmental handoffs', () => {
       expect(reporterView.statusCode).toBe(200);
       expect(reporterView.json().department).toBe('facilities');
 
+      // Self-handoff is rejected
+      const selfHandoff = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/handoffs`,
+        headers: facilitiesHeaders,
+        payload: { targetDepartment: 'facilities', summaryCiphertext: ciphertext },
+      });
+      expect(selfHandoff.statusCode).toBe(400);
+      expect(selfHandoff.json().code).toBe('INVALID_HANDOFF_TARGET');
+
+      // Unauthorized department cannot accept or decline someone else's incoming handoff
+      const strangerAccept = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/handoffs/${handoffId}/accept`,
+        headers: safetyHeaders,
+      });
+      expect(strangerAccept.statusCode).toBe(403);
+
       // 4. Student Services accepts the handoff
       const acceptRes = await app.inject({
         method: 'POST',
@@ -181,6 +199,15 @@ describe('interdepartmental handoffs', () => {
         headers: servicesHeaders,
       });
       expect(acceptRes.statusCode).toBe(200);
+
+      // Declining an already accepted handoff fails
+      const declineAccepted = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/handoffs/${handoffId}/decline`,
+        headers: servicesHeaders,
+      });
+      expect(declineAccepted.statusCode).toBe(409);
+      expect(declineAccepted.json().code).toBe('HANDOFF_NOT_APPROVED');
 
       // 5. Post-acceptance verification:
       // a) Case immediately disappears from Facilities' list
@@ -246,6 +273,15 @@ describe('interdepartmental handoffs', () => {
         headers: safetyHeaders,
       });
       expect(declineRes.statusCode).toBe(200);
+
+      // Attempting to accept a declined handoff fails
+      const acceptDeclined = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/handoffs/${handoff2Id}/accept`,
+        headers: safetyHeaders,
+      });
+      expect(acceptDeclined.statusCode).toBe(409);
+      expect(acceptDeclined.json().code).toBe('HANDOFF_NOT_APPROVED');
 
       // Campus Safety (Dpt2) sees the declined handoff in their incoming handoffs list
       const safetyHandoffs = await app.inject({ url: '/v1/reviewer/handoffs', headers: safetyHeaders });
