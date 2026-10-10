@@ -1,0 +1,60 @@
+{
+  "name": "incognito",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Verified anonymous reporting — a synthetic hackathon demonstrator",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "setup": "tsx scripts/setup.ts",
+    "roster": "tsx scripts/roster.ts",
+    "artifacts": "tsx scripts/artifacts.ts",
+    "dev": "concurrently -k -n authority,api,web \"tsx watch apps/authority/server.ts\" \"tsx watch apps/api/server.ts\" \"vite --host 127.0.0.1\"",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "demo": "tsx scripts/demo.ts",
+    "chain:node": "hardhat node --hostname 127.0.0.1",
+    "chain:demo": "tsx scripts/chain-demo.ts",
+    "format": "prettier --write apps packages scripts tests docs *.ts *.json *.html .github/workflows/*.yml",
+    "format:check": "prettier --check apps packages scripts tests docs *.ts *.json *.html .github/workflows/*.yml"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@fastify/cors": "11.3.1",
+    "@semaphore-protocol/group": "4.14.3",
+    "@semaphore-protocol/identity": "4.14.3",
+    "@semaphore-protocol/proof": "4.14.3",
+    "fastify": "5.12.5",
+    "libsodium-wrappers-sumo": "0.8.4",
+    "lucide-react": "1.55.0",
+    "postgres": "3.4.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "viem": "2.57.4",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/libsodium-wrappers-sumo": "0.7.8",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "concurrently": "10.0.6",
+    "hardhat": "3.19.0",
+    "prettier": "3.9.10",
+    "solc": "0.8.37",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "ws": "8.21.0",
+    "underscore": "1.13.8",
+    "tmp": "0.2.7",
+    "snarkjs": "0.7.5"
+  }
+}

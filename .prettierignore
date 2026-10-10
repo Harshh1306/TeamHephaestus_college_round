@@ -1,0 +1,7 @@
+node_modules
+dist
+.local
+public/artifacts
+package-lock.json
+docs/test-evidence
+contracts

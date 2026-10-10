@@ -1,0 +1,16 @@
+{
+  "network": "local-hardhat",
+  "chainId": 31337,
+  "addresses": {
+    "AuditAnchor": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+    "MembershipRegistry": "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512"
+  },
+  "batchId": "0xd1567835b345073948b13df1cc6ab1e9e1ea9facd614ae2a049c2a1ce32fdcf1",
+  "root": "0x938c1d19d077db81bdc78c3593331f9621a163e43d90c2b5179929e5f58f5ac1",
+  "transactionHash": "0xcc5c8c069323e24b38560433485cef4f96b2869ca649058af486aa0309fc4c31",
+  "ownerEnforced": true,
+  "overwriteRejected": true,
+  "inclusionValid": true,
+  "tamperDetected": true,
+  "membershipRoot": "21776933333401138168546023922515084337498607173840478008851618483896810283536"
+}

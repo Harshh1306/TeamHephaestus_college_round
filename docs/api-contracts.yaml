@@ -1,0 +1,319 @@
+openapi: 3.1.0
+info:
+  title: Incognito local demonstrator API
+  version: 0.1.0
+  description: >-
+    Synthetic data only. Request/response validation lives in packages/protocol and apps/api.
+    The enrollment authority runs separately on port 3002. Browser requests omit cookies.
+servers:
+  - url: http://127.0.0.1:3001
+components:
+  securitySchemes:
+    reviewer:
+      type: http
+      scheme: bearer
+      description: Random demo reviewer token; topic permissions checked server-side.
+    caseSecret:
+      type: http
+      scheme: bearer
+      description: Fresh 256-bit hexadecimal secret for this case only.
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string }
+    Envelope:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          protocolVersion,
+          organizationId,
+          topicId,
+          policyVersion,
+          period,
+          slot,
+          keyVersion,
+          ciphertext,
+          accessVerifier,
+          replyPublicKey,
+          nonce,
+        ]
+      properties:
+        protocolVersion: { const: incognito-v1 }
+        organizationId: { const: college-demo }
+        topicId: { enum: [faculty-conduct, administration, infrastructure, campus-safety, other] }
+        policyVersion: { const: 1 }
+        period: { type: string, pattern: '^\d{4}-\d{2}$', description: Current UTC month only }
+        slot: { type: integer, minimum: 0, maximum: 2 }
+        keyVersion: { const: 1 }
+        ciphertext:
+          {
+            type: string,
+            minLength: 64,
+            maxLength: 100000,
+            description: Original-base64 libsodium sealed box,
+          }
+        accessVerifier: { type: string, pattern: '^[0-9a-f]{64}$' }
+        replyPublicKey: { type: string, pattern: '^[0-9a-f]{64}$' }
+        nonce: { type: string, pattern: '^[0-9a-f]{64}$' }
+    Proof:
+      type: object
+      additionalProperties: false
+      required: [merkleTreeDepth, merkleTreeRoot, nullifier, message, scope, points]
+      properties:
+        merkleTreeDepth: { const: 6 }
+        merkleTreeRoot: { type: string, description: Canonical unsigned decimal }
+        nullifier: { type: string, description: Canonical unsigned decimal }
+        message: { type: string, description: Canonical unsigned decimal }
+        scope: { type: string, description: Canonical unsigned decimal }
+        points: { type: array, minItems: 8, maxItems: 8, items: { type: string } }
+    Receipt:
+      type: object
+      required: [caseId, commitment, acceptedAt, signature, integrityStatus]
+      properties:
+        caseId: { type: string, format: uuid }
+        commitment: { type: string }
+        acceptedAt: { type: string, format: date-time }
+        signature: { type: string, description: Base64 Ed25519 signature }
+        integrityStatus:
+          {
+            const: pending-anchor,
+            description: Status at original acceptance; use inclusion endpoint for current evidence,
+          }
+    Message:
+      type: object
+      additionalProperties: false
+      required: [id, ciphertext]
+      properties:
+        id: { type: string, format: uuid }
+        ciphertext: { type: string, minLength: 64, maxLength: 50000 }
+paths:
+  /v1/health:
+    get:
+      responses:
+        '200': { description: Service status and synthetic-demo mode }
+  /v1/reporting-policy:
+    get:
+      responses:
+        '200':
+          {
+            description: Current month,
+            topics,
+            slots,
+            reviewer key,
+            verification public keys and signed membership snapshot,
+          }
+  /v1/reports:
+    post:
+      description: No institutional authentication. Maximum body 150000 bytes. At most two concurrent proof verifications.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [envelope, proof]
+              properties:
+                envelope: { $ref: '#/components/schemas/Envelope' }
+                proof: { $ref: '#/components/schemas/Proof' }
+      responses:
+        '201': { description: Accepted with signed receipt; never a private case secret }
+        '400':
+          {
+            description: INVALID_PAYLOAD,
+            INVALID_PROOF,
+            UNAUTHORIZED_GROUP,
+            INVALID_SCOPE,
+            MESSAGE_MISMATCH or POLICY_EXPIRED,
+          }
+        '409':
+          {
+            description: DUPLICATE_SUBMISSION; original credentials can recover a lost acceptance response,
+          }
+        '413': { description: Oversized request }
+        '429': { description: VERIFIER_BUSY; no slot consumed }
+  /v1/cases/access:
+    post:
+      description: Recover a receipt after a lost response using the originally generated secret and nonce.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [secret, nonce]
+              properties:
+                secret: { type: string, pattern: '^[0-9a-f]{64}$' }
+                nonce: { type: string, pattern: '^[0-9a-f]{64}$' }
+      responses:
+        '200': { description: Original case ID, status and receipt }
+        '403': { description: ACCESS_DENIED }
+  /v1/cases/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      security: [{ caseSecret: [] }]
+      responses:
+        '200': { description: Authorized case status and original receipt }
+        '403': { description: ACCESS_DENIED }
+  /v1/cases/{id}/messages:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      security: [{ caseSecret: [] }]
+      responses:
+        '200': { description: Ordered ciphertext messages for this case }
+    post:
+      security: [{ caseSecret: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Message' }
+      responses:
+        '201': { description: Encrypted reporter reply stored }
+        '409': { description: Duplicate message UUID }
+  /v1/cases/{id}/inclusion:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      security: [{ caseSecret: [] }]
+      responses:
+        '200':
+          {
+            description: Pending status or root,
+            leaf,
+            sibling path and currently verified local-chain evidence; no unrelated leaves,
+          }
+  /v1/reviewer/cases:
+    get:
+      security: [{ reviewer: [] }]
+      responses:
+        '200':
+          {
+            description: Up to 100 recent cases filtered to permitted topics; no member commitments,
+            nullifiers or enrollment IDs,
+          }
+        '403': { description: ACCESS_DENIED }
+  /v1/reviewer/cases/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      security: [{ reviewer: [] }]
+      responses:
+        '200': { description: Permitted case ciphertext and per-case reply public key }
+        '403': { description: ACCESS_DENIED }
+  /v1/reviewer/cases/{id}/status:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      security: [{ reviewer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { enum: [triaged, under-review, awaiting-information, resolved, closed] }
+      responses:
+        '200': { description: Transition and reviewer audit event committed }
+        '409': { description: INVALID_TRANSITION }
+  /v1/reviewer/cases/{id}/messages:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      security: [{ reviewer: [] }]
+      responses:
+        '200': { description: Permitted case ciphertext messages }
+    post:
+      security: [{ reviewer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Message' }
+      responses:
+        '201': { description: Reviewer ciphertext and audit event stored atomically }
+  /v1/reviewer/audit/prepare:
+    post:
+      security: [{ reviewer: [] }]
+      responses:
+        '200':
+          {
+            description: Existing pending batch or newly committed batch for the local anchoring worker,
+          }
+        '409': { description: NO_REPORTS }
+  /v1/reviewer/audit/confirm:
+    post:
+      security: [{ reviewer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, transactionHash]
+              properties:
+                id: { type: string, format: uuid }
+                transactionHash: { type: string, pattern: '^0x[0-9a-f]{64}$' }
+      responses:
+        '200': { description: Transaction and root verified on local EVM chain }
+        '409': { description: ANCHOR_NOT_VERIFIED }
+  /v1/internal/snapshots:
+    post:
+      description: Accept a valid authority-signed snapshot only; recompute root and require monotonic epoch. Maximum 64 members.
+      responses:
+        '200': { description: New root is effective for subsequent admission transactions }
+        '400': { description: Invalid snapshot or signature }
+        '409': { description: STALE_EPOCH or EPOCH_CONFLICT }
+  /v1/lab/run:
+    post:
+      description: Local development only; disabled with NODE_ENV=production. Runs isolated synthetic cryptographic tests.
+      responses:
+        '200': { description: Actual per-test outcome, measured time and sanitized evidence }
+        '429': { description: LAB_BUSY }
+  /v1/enrollments:
+    servers: [{ url: 'http://127.0.0.1:3002' }]
+    post:
+      description: Synthetic roll number and password are checked by the enrollment authority only.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rollNumber, password, commitment]
+              properties:
+                rollNumber: { type: string, description: Synthetic roster identifier }
+                password: { type: string, format: password }
+                commitment:
+                  { type: string, description: Positive BN254-field public identity commitment }
+      responses:
+        '200': { description: Credential active and root publication acknowledged }
+        '403': { description: NOT_ELIGIBLE }
+        '409': { description: ALREADY_ENROLLED or COMMITMENT_IN_USE }
+        '503':
+          { description: PUBLISH_UNAVAILABLE; retry same commitment, do not generate a replacement }
+  /v1/enrollments/revoke:
+    servers: [{ url: 'http://127.0.0.1:3002' }]
+    post:
+      description: Requires the authority admin bearer token, never a reviewer token.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [memberId]
+              additionalProperties: false
+              properties:
+                memberId: { type: string }
+      responses:
+        '200': { description: Revocation published and effective epoch acknowledged }
+        '403': { description: ACCESS_DENIED }
+        '409': { description: MINIMUM_GROUP_SIZE }
+        '503': { description: PUBLISH_UNAVAILABLE; revocation is not yet acknowledged as effective }

@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-10",
+  "environment": "Windows, Codex in-app Chromium, localhost",
+  "syntheticDataOnly": true,
+  "checks": [
+    { "check": "Enrollment invitation creates a browser-local identity and publishes a signed root", "passed": true },
+    { "check": "Browser Web Worker produces a real Semaphore proof and encrypted report is accepted", "passed": true },
+    { "check": "Reviewer locally decrypts report and reporter follow-up", "passed": true },
+    { "check": "Reviewer triages case and sends an encrypted question", "passed": true },
+    { "check": "Reporter decrypts reviewer response without institutional login", "passed": true },
+    { "check": "Encrypted case backup exports and restores after page reload", "passed": true },
+    { "check": "Pasted encrypted backup restores the same case and conversation", "passed": true },
+    { "check": "Browser verifies receipt signature, Merkle path, and local chain root independently", "passed": true },
+    { "check": "Live Privacy Lab executes and displays 31 of 31 passing checks", "passed": true },
+    { "check": "Overview renders at desktop and 390px phone viewport", "passed": true }
+  ],
+  "limitations": [
+    "Local Hardhat chain only; no public testnet deployment",
+    "Manual browser QA, not a committed automated Playwright suite",
+    "Only synthetic report and credentials used"
+  ]
+}

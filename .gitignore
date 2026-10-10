@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.local/
+.env
+*.log
+public/artifacts/
+coverage/
+test-results/
+artifacts/
+cache/

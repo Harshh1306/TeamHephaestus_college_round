@@ -1,0 +1,227 @@
+{
+  "suite": "Incognito adversarial admission v1",
+  "synthetic": true,
+  "executedAt": "2026-10-10T12:18:53.456Z",
+  "durationMs": 28048,
+  "results": [
+    {
+      "id": "ZK-01",
+      "name": "Real member proof verifies",
+      "passed": true,
+      "durationMs": 47,
+      "evidence": "Generated and verified a Semaphore V4 Groth16 proof for one of three synthetic members."
+    },
+    {
+      "id": "ZK-02",
+      "name": "Outsider rejected",
+      "passed": true,
+      "durationMs": 1897,
+      "evidence": "A valid proof for an outsider-controlled group was rejected by the API."
+    },
+    {
+      "id": "ZK-03",
+      "name": "Altered proof rejected",
+      "passed": true,
+      "durationMs": 159,
+      "evidence": "Mutating a curve point fails cryptographic verification."
+    },
+    {
+      "id": "ZK-04",
+      "name": "Unauthorized root rejected",
+      "passed": true,
+      "durationMs": 6,
+      "evidence": "The server checks its authorized membership state."
+    },
+    {
+      "id": "SCOPE-01",
+      "name": "Topic substitution rejected",
+      "passed": true,
+      "durationMs": 5,
+      "evidence": "Changing the topic invalidates the server-derived scope."
+    },
+    {
+      "id": "MSG-01",
+      "name": "Ciphertext substitution rejected",
+      "passed": true,
+      "durationMs": 5,
+      "evidence": "The proof is bound to the exact encrypted report."
+    },
+    {
+      "id": "MSG-02",
+      "name": "Case credential substitution rejected",
+      "passed": true,
+      "durationMs": 5,
+      "evidence": "An intercepted proof cannot be rebound to an attacker’s case credential."
+    },
+    {
+      "id": "API-01",
+      "name": "Expired period rejected",
+      "passed": true,
+      "durationMs": 3,
+      "evidence": "Admission accepts only the active UTC month."
+    },
+    {
+      "id": "API-02",
+      "name": "Unauthorized slot rejected",
+      "passed": true,
+      "durationMs": 6,
+      "evidence": "Only policy-authorized slots 0, 1 and 2 are accepted."
+    },
+    {
+      "id": "PRIV-01",
+      "name": "Identity fields rejected",
+      "passed": true,
+      "durationMs": 4,
+      "evidence": "Strict schemas reject extra identity fields in report requests."
+    },
+    {
+      "id": "API-03",
+      "name": "Oversized request rejected",
+      "passed": true,
+      "durationMs": 6,
+      "evidence": "Oversized requests are rejected before cryptographic verification."
+    },
+    {
+      "id": "DUP-02",
+      "name": "Concurrent duplicates: exactly one case",
+      "passed": true,
+      "durationMs": 339,
+      "evidence": "Two concurrent requests produced one case and one consumed nullifier."
+    },
+    {
+      "id": "REPLAY-01",
+      "name": "Replay cannot disclose a case secret",
+      "passed": true,
+      "durationMs": 60,
+      "evidence": "Replaying acceptance creates no second case and returns no secret."
+    },
+    {
+      "id": "DUP-01",
+      "name": "Same slot produces the same nullifier",
+      "passed": true,
+      "durationMs": 1730,
+      "evidence": "A fresh valid proof in the same slot is atomically rejected; insertion rolls back."
+    },
+    {
+      "id": "SCOPE-02",
+      "name": "Another topic has a distinct nullifier",
+      "passed": true,
+      "durationMs": 2017,
+      "evidence": "Two authorized topics yield different nullifiers and both can be accepted."
+    },
+    {
+      "id": "SCOPE-03",
+      "name": "Another authorized slot is accepted",
+      "passed": true,
+      "durationMs": 2268,
+      "evidence": "A second authorized slot permits a legitimate additional report."
+    },
+    {
+      "id": "ENC-01",
+      "name": "Only the intended reviewer decrypts",
+      "passed": true,
+      "durationMs": 10,
+      "evidence": "Correct recipient decrypts; unrelated recipient fails sealed-box authentication."
+    },
+    {
+      "id": "ENC-02",
+      "name": "Modified ciphertext fails decryption",
+      "passed": true,
+      "durationMs": 2,
+      "evidence": "Ciphertext corruption is detected by authenticated encryption."
+    },
+    {
+      "id": "AUTH-01",
+      "name": "Unauthenticated reviewer denied",
+      "passed": true,
+      "durationMs": 4,
+      "evidence": "The API, not just the UI, enforces reviewer access."
+    },
+    {
+      "id": "AUTH-02",
+      "name": "Wrong case credential denied",
+      "passed": true,
+      "durationMs": 22,
+      "evidence": "Case access requires its own random secret."
+    },
+    {
+      "id": "AUTH-03",
+      "name": "Correct case credential accepted",
+      "passed": true,
+      "durationMs": 10,
+      "evidence": "The reporter follows up without institutional authentication."
+    },
+    {
+      "id": "RECOVERY-01",
+      "name": "Lost acceptance response can be recovered",
+      "passed": true,
+      "durationMs": 19,
+      "evidence": "A retained case secret and proof-bound nonce recover the original receipt."
+    },
+    {
+      "id": "AUTH-04",
+      "name": "Reviewer topic permissions enforced",
+      "passed": true,
+      "durationMs": 7,
+      "evidence": "A valid reviewer token alone does not authorize a case outside its permitted topics."
+    },
+    {
+      "id": "CASE-01",
+      "name": "Status transitions are checked and audited",
+      "passed": true,
+      "durationMs": 33,
+      "evidence": "Skipping directly to resolution is rejected; triage writes an audit event atomically."
+    },
+    {
+      "id": "CASE-02",
+      "name": "Encrypted two-way follow-up works",
+      "passed": true,
+      "durationMs": 46,
+      "evidence": "Each direction decrypts only with its recipient’s private key."
+    },
+    {
+      "id": "RECEIPT-01",
+      "name": "Receipt signature detects alteration",
+      "passed": true,
+      "durationMs": 4,
+      "evidence": "The Ed25519 receipt covers the case ID, commitment and acceptance time."
+    },
+    {
+      "id": "ENC-03",
+      "name": "Encrypted backup restores; wrong password fails",
+      "passed": true,
+      "durationMs": 1512,
+      "evidence": "AES-GCM backup authentication and password-derived decryption execute successfully."
+    },
+    {
+      "id": "PRIV-02",
+      "name": "Reporting records contain no member identity",
+      "passed": true,
+      "durationMs": 7,
+      "evidence": "Persisted report records contain ciphertext and per-case metadata, without membership secrets, commitments or plaintext."
+    },
+    {
+      "id": "REV-01",
+      "name": "Revocation invalidates old proofs",
+      "passed": true,
+      "durationMs": 213,
+      "evidence": "A signed new epoch is installed; all proofs against the old root are rejected."
+    },
+    {
+      "id": "MEM-01",
+      "name": "Forged membership update rejected",
+      "passed": true,
+      "durationMs": 22,
+      "evidence": "A root update requires the enrollment authority’s valid signature."
+    },
+    {
+      "id": "MEM-02",
+      "name": "Old signed root cannot be restored",
+      "passed": true,
+      "durationMs": 32,
+      "evidence": "Monotonic epochs reject a correctly signed but outdated snapshot."
+    }
+  ],
+  "passed": 31,
+  "total": 31
+}
