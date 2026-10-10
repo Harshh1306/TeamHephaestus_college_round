@@ -1,0 +1,95 @@
+{
+  "abi": [
+    {
+      "inputs": [],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidBatch",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "Unauthorized",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes32",
+          "name": "root",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "commitmentVersion",
+          "type": "uint256"
+        }
+      ],
+      "name": "BatchAnchored",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "batchId",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "root",
+          "type": "bytes32"
+        }
+      ],
+      "name": "anchor",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "name": "roots",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60a0604052348015600e575f5ffd5b503360805260805161020f6100305f395f81816048015260d4015261020f5ff3fe608060405234801561000f575f5ffd5b506004361061003f575f3560e01c80638da5cb5b14610043578063a21f3c6a14610087578063ae6dead71461009c575b5f5ffd5b61006a7f000000000000000000000000000000000000000000000000000000000000000081565b6040516001600160a01b0390911681526020015b60405180910390f35b61009a6100953660046101a2565b6100c9565b005b6100bb6100aa3660046101c2565b5f6020819052908152604090205481565b60405190815260200161007e565b336001600160a01b037f00000000000000000000000000000000000000000000000000000000000000001614610111576040516282b42960e81b815260040160405180910390fd5b80158061011c575081155b8061013357505f8281526020819052604090205415155b15610151576040516333b094a160e01b815260040160405180910390fd5b5f8281526020818152604091829020839055815183815260019181019190915283917f8a9f24ba2b987a61ee1795c8550f6bd177ff96ca5fe1528dbe3bcbbf6a3b9213910160405180910390a25050565b5f5f604083850312156101b3575f5ffd5b50508035926020909101359150565b5f602082840312156101d2575f5ffd5b503591905056fea26469706673582212209f1e3d81ade396508a270726c57b8f13f3188c4cf6071e6965c266df413e581d64736f6c63430008250033"
+}

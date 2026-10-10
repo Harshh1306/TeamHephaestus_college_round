@@ -1,0 +1,96 @@
+{
+  "abi": [
+    {
+      "inputs": [],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidEpoch",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "Unauthorized",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "epoch",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "root",
+          "type": "uint256"
+        }
+      ],
+      "name": "MembershipPublished",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "authority",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "epoch",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "nextEpoch",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "nextRoot",
+          "type": "uint256"
+        }
+      ],
+      "name": "publish",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "root",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60a0604052348015600e575f5ffd5b50336080526080516101d26100305f395f8181606e015260d101526101d25ff3fe608060405234801561000f575f5ffd5b506004361061004a575f3560e01c8063900cf0cf1461004e578063bf7e214f14610069578063c2e43315146100a8578063ebf0c717146100bd575b5f5ffd5b6100565f5481565b6040519081526020015b60405180910390f35b6100907f000000000000000000000000000000000000000000000000000000000000000081565b6040516001600160a01b039091168152602001610060565b6100bb6100b636600461017c565b6100c6565b005b61005660015481565b336001600160a01b037f0000000000000000000000000000000000000000000000000000000000000000161461010e576040516282b42960e81b815260040160405180910390fd5b5f548211158061011c575080155b1561013a5760405163d5b25b6360e01b815260040160405180910390fd5b5f829055600181905560405181815282907fee5f0fcc5552e4072abf641d858a5dfad1870286297a1be2143a5ee8ef835a829060200160405180910390a25050565b5f5f6040838503121561018d575f5ffd5b5050803592602090910135915056fea264697066735822122026748eb7785a3d6e2e0eb9a9364ea6177f169f9f92d4b0b1a06937a32672e57464736f6c63430008250033"
+}

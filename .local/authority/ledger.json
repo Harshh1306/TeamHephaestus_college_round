@@ -1,5 +1,5 @@
 {
-  "epoch": 5,
+  "epoch": 7,
   "members": [
     {
       "id": "student-01",
@@ -78,11 +78,13 @@
     },
     {
       "id": "student-18",
-      "passwordHash": "scrypt:8be0b2cf42894c57096f9acdbbb47cbb:eb37ea8562e7eb9094c7043a2f96958479dbe43d35dc555e75143f453ecfe2d7"
+      "passwordHash": "scrypt:8be0b2cf42894c57096f9acdbbb47cbb:eb37ea8562e7eb9094c7043a2f96958479dbe43d35dc555e75143f453ecfe2d7",
+      "commitment": "17940552160095024501956354098633124488724098119930621688407954001002422073433"
     },
     {
       "id": "student-19",
-      "passwordHash": "scrypt:28520d6fc48bd1ecb6516fb4e857e154:5e085bd48184e4dacc91ffb813b66dd539f8303393dee867680294a3a9afaf25"
+      "passwordHash": "scrypt:28520d6fc48bd1ecb6516fb4e857e154:5e085bd48184e4dacc91ffb813b66dd539f8303393dee867680294a3a9afaf25",
+      "commitment": "8784297086745263479893682388182008747455832905954739446511401915653560784633"
     },
     {
       "id": "student-20",

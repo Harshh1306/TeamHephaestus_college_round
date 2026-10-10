@@ -14,12 +14,21 @@ import {
   ORGANIZATION,
   TOPICS,
   MAX_HANDOFFS,
+  PublicationSchema,
   type Snapshot,
   type Envelope,
   type Receipt,
   type HandoffHistoryItem,
   type PendingHandoffSummary,
 } from '../../packages/protocol/index';
+import {
+  PublicCommentSchema,
+  PublicListSchema,
+  PublicSupportSchema,
+  publicSignalMessage,
+  publicSignalScope,
+  type PublicSignal,
+} from '../../packages/protocol/public-cases';
 import { safeEqual, signText, validSnapshot, rawPublicKey } from '../../packages/server/signatures';
 import {
   configuredDepartments,
@@ -53,6 +62,10 @@ type Case = {
   reopen_reason: string | null;
   current_department?: string | null;
   handoff_count?: number;
+  public_summary: string | null;
+  public_title: string | null;
+  support_threshold: number | null;
+  private_until_threshold: boolean;
   created_at: string;
 };
 type Handoff = {
@@ -198,7 +211,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
         throw new ApiError('UNAUTHORIZED_GROUP');
       const initialDepartment = departmentForTopic(config, envelope.topicId);
       await tx.query(
-        'INSERT INTO reports(id,topic,envelope,commitment,receipt,current_department,handoff_count) VALUES($1,$2,$3,$4,$5,$6,$7)',
+        'INSERT INTO reports(id,topic,envelope,commitment,receipt,current_department,handoff_count,public_summary,support_threshold,private_until_threshold,public_title) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
         [
           caseId,
           envelope.topicId,
@@ -207,6 +220,10 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
           JSON.stringify(receipt),
           initialDepartment,
           0,
+          envelope.publication?.summary ?? null,
+          envelope.publication?.supportThreshold ?? null,
+          envelope.publication?.privateUntilThreshold ?? false,
+          envelope.publication?.title ?? null,
         ],
       );
       await tx.query(
@@ -232,7 +249,11 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
     if (!actor) throw new ApiError('ACCESS_DENIED', 403);
     if (target) {
       const topic = typeof target === 'string' ? target : target.topic;
-      if (!config.reviewers?.length && config.reviewerTopics && !config.reviewerTopics.includes(topic))
+      if (
+        !config.reviewers?.length &&
+        config.reviewerTopics &&
+        !config.reviewerTopics.includes(topic)
+      )
         throw new ApiError('ACCESS_DENIED', 403);
       if (typeof target === 'string') {
         if (departmentForTopic(config, target as (typeof TOPICS)[number]) !== actor.departmentId)
@@ -253,7 +274,140 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       throw new ApiError('ACCESS_DENIED', 403);
   }
   const params = (req: { params: unknown }) => z.object({ id: z.uuid() }).parse(req.params);
+  async function supportCount(caseId: string, tx: DB = db) {
+    const [count] = await tx.query<{ total: string }>(
+      'SELECT COUNT(*)::text AS total FROM public_supports WHERE case_id=$1',
+      [caseId],
+    );
+    return Number(count.total);
+  }
+  async function verifyPublicSignal(
+    proof: z.infer<typeof PublicListSchema>['proof'],
+    signal: PublicSignal,
+  ) {
+    if (proof.scope !== (await publicSignalScope(signal))) throw new ApiError('INVALID_SCOPE');
+    if (proof.message !== (await publicSignalMessage(signal)))
+      throw new ApiError('MESSAGE_MISMATCH');
+    if (proof.merkleTreeRoot !== (await currentSnapshot()).root)
+      throw new ApiError('UNAUTHORIZED_GROUP');
+    if (activeVerifications >= 2) throw new ApiError('VERIFIER_BUSY', 429);
+    activeVerifications++;
+    let valid = false;
+    try {
+      valid = await verifyProof(proof as Parameters<typeof verifyProof>[0]);
+    } catch {
+      /* An invalid proof grants no read or write access. */
+    } finally {
+      activeVerifications--;
+    }
+    if (!valid) throw new ApiError('INVALID_PROOF');
+    if (proof.merkleTreeRoot !== (await currentSnapshot()).root)
+      throw new ApiError('UNAUTHORIZED_GROUP');
+  }
+  app.post('/v1/public-cases/list', async (req) => {
+    const { nonce, proof } = PublicListSchema.parse(req.body);
+    await verifyPublicSignal(proof, { action: 'list', nonce });
+    const rows = await db.query<Case>(
+      'SELECT id,topic,public_title,public_summary,support_threshold,private_until_threshold,created_at FROM reports WHERE public_summary IS NOT NULL',
+    );
+    const counts = await db.query<{ case_id: string; total: string }>(
+      'SELECT case_id,COUNT(*)::text AS total FROM public_supports GROUP BY case_id',
+    );
+    const countByCase = new Map(counts.map((row) => [row.case_id, Number(row.total)]));
+    const comments = await db.query<{ case_id: string; text: string; created_at: string }>(
+      'SELECT case_id,text,created_at FROM public_comments ORDER BY created_at,nullifier',
+    );
+    const commentsByCase = new Map<string, { text: string; createdAt: string }[]>();
+    for (const comment of comments) {
+      const list = commentsByCase.get(comment.case_id) ?? [];
+      list.push({ text: comment.text, createdAt: comment.created_at });
+      commentsByCase.set(comment.case_id, list);
+    }
+    return rows
+      .map((row) => ({
+        id: row.id,
+        topic: row.topic,
+        summary: row.public_summary,
+        title: row.public_title,
+        supportCount: countByCase.get(row.id) ?? 0,
+        supportThreshold: row.support_threshold,
+        comments: commentsByCase.get(row.id) ?? [],
+        createdAt: row.created_at,
+      }))
+      .sort(
+        (a, b) =>
+          b.supportCount - a.supportCount ||
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+  });
+  app.post('/v1/public-cases/:id/support', async (req) => {
+    const id = params(req).id;
+    const { proof } = PublicSupportSchema.parse(req.body);
+    await verifyPublicSignal(proof, { action: 'support', caseId: id });
+    return db.transaction(async (tx) => {
+      if (proof.merkleTreeRoot !== (await currentSnapshot(tx, true)).root)
+        throw new ApiError('UNAUTHORIZED_GROUP');
+      const [row] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [id]);
+      if (!row?.public_summary) throw new ApiError('CASE_NOT_PUBLIC', 404);
+      const prior = await tx.query(
+        'SELECT 1 FROM public_supports WHERE case_id=$1 AND nullifier=$2',
+        [id, proof.nullifier],
+      );
+      if (prior.length) throw new ApiError('ALREADY_SUPPORTED', 409);
+      await tx.query('INSERT INTO public_supports(case_id,nullifier) VALUES($1,$2)', [
+        id,
+        proof.nullifier,
+      ]);
+      return { supportCount: await supportCount(id, tx) };
+    });
+  });
+  app.post('/v1/public-cases/:id/comments', async (req) => {
+    const id = params(req).id;
+    const { text, proof } = PublicCommentSchema.parse(req.body);
+    await verifyPublicSignal(proof, { action: 'comment', caseId: id, text });
+    await db.transaction(async (tx) => {
+      if (proof.merkleTreeRoot !== (await currentSnapshot(tx, true)).root)
+        throw new ApiError('UNAUTHORIZED_GROUP');
+      const [row] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [id]);
+      if (!row?.public_summary) throw new ApiError('CASE_NOT_PUBLIC', 404);
+      const prior = await tx.query(
+        'SELECT 1 FROM public_comments WHERE case_id=$1 AND nullifier=$2',
+        [id, proof.nullifier],
+      );
+      if (prior.length) throw new ApiError('ALREADY_COMMENTED', 409);
+      await tx.query('INSERT INTO public_comments(case_id,nullifier,text) VALUES($1,$2,$3)', [
+        id,
+        proof.nullifier,
+        text,
+      ]);
+    });
+    return { posted: true };
+  });
+  app.patch('/v1/cases/:id/publication', async (req) => {
+    const id = params(req).id;
+    const { publication } = z
+      .object({ publication: PublicationSchema.nullable() })
+      .strict()
+      .parse(req.body);
+    await db.transaction(async (tx) => {
+      const [row] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [id]);
+      if (!row) throw new ApiError('ACCESS_DENIED', 403);
+      await reporter(req, row);
+      await tx.query(
+        'UPDATE reports SET public_summary=$1,support_threshold=$2,private_until_threshold=$3,public_title=$5 WHERE id=$4',
+        [
+          publication?.summary ?? null,
+          publication?.supportThreshold ?? null,
+          publication?.privateUntilThreshold ?? false,
+          id,
+          publication?.title ?? null,
+        ],
+      );
+    });
+    return { updated: true };
+  });
   async function enrichCase(row: Case, actorDepartment?: string) {
+    const count = await supportCount(row.id);
     const handoffs = await db.query<Handoff>(
       'SELECT * FROM case_handoffs WHERE case_id=$1 ORDER BY created_at ASC',
       [row.id],
@@ -304,18 +458,40 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       handoffCount: row.handoff_count ?? 0,
       pendingHandoff,
       handoffHistory: history,
+      publicSummary: row.public_summary,
+      publicTitle: row.public_title,
+      supportCount: count,
+      supportThreshold: row.support_threshold,
+      privateUntilThreshold: row.private_until_threshold,
+      reviewerPublic:
+        !!row.public_summary &&
+        (!row.private_until_threshold || count >= (row.support_threshold ?? 1)),
+      publicUrgent:
+        !!row.public_summary && row.support_threshold !== null && count >= row.support_threshold,
     };
   }
   app.get('/v1/reviewer/cases', async (req) => {
     const actor = reviewer(req);
     const rows = await db.query<Case>('SELECT * FROM reports ORDER BY created_at DESC LIMIT 100');
     const owned = rows.filter((row) => {
-      if (!config.reviewers?.length && config.reviewerTopics && !config.reviewerTopics.includes(row.topic)) {
+      if (
+        !config.reviewers?.length &&
+        config.reviewerTopics &&
+        !config.reviewerTopics.includes(row.topic)
+      ) {
         return false;
       }
       return activeDepartmentForCase(config, row) === actor.departmentId;
     });
-    return Promise.all(owned.map((r) => enrichCase(r, actor.departmentId)));
+    const enriched = await Promise.all(owned.map((r) => enrichCase(r, actor.departmentId)));
+    return enriched.sort(
+      (a, b) =>
+        Number(b.reviewerPublic) - Number(a.reviewerPublic) ||
+        (a.reviewerPublic && b.reviewerPublic
+          ? b.supportCount - a.supportCount || Number(b.publicUrgent) - Number(a.publicUrgent)
+          : 0) ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
   });
   app.get('/v1/reviewer/cases/:id', async (req) => {
     const actor = reviewer(req);
@@ -393,6 +569,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
   app.get('/v1/cases/:id', async (req) => {
     const row = await readCase(params(req).id);
     await reporter(req, row);
+    const count = await supportCount(row.id);
     return {
       id: row.id,
       topic: row.topic,
@@ -402,6 +579,11 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       reopenReason: row.reopen_reason,
       receipt: row.receipt,
       department: activeDepartmentForCase(config, row),
+      publicSummary: row.public_summary,
+      publicTitle: row.public_title,
+      supportCount: count,
+      supportThreshold: row.support_threshold,
+      privateUntilThreshold: row.private_until_threshold,
     };
   });
   app.post('/v1/cases/access', async (req) => {
@@ -510,7 +692,8 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       const [locked] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [id]);
       if (!locked) throw new ApiError('ACCESS_DENIED', 403);
       reviewer(req, locked);
-      if ((locked.handoff_count ?? 0) >= MAX_HANDOFFS) throw new ApiError('MAX_HANDOFFS_EXCEEDED', 409);
+      if ((locked.handoff_count ?? 0) >= MAX_HANDOFFS)
+        throw new ApiError('MAX_HANDOFFS_EXCEEDED', 409);
       const previouslyDeclined = await tx.query<{ id: string }>(
         "SELECT id FROM case_handoffs WHERE case_id=$1 AND target_department=$2 AND status='declined'",
         [id, target.id],
@@ -576,12 +759,12 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
         throw new ApiError('ACCESS_DENIED', 403);
       if (handoff.status === 'accepted') return;
       if (handoff.status !== 'approved') throw new ApiError('HANDOFF_NOT_APPROVED', 409);
-      const [reportRow] = await tx.query<Case>(
-        'SELECT * FROM reports WHERE id=$1 FOR UPDATE',
-        [handoff.case_id],
-      );
+      const [reportRow] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [
+        handoff.case_id,
+      ]);
       if (!reportRow) throw new ApiError('ACCESS_DENIED', 403);
-      if ((reportRow.handoff_count ?? 0) >= MAX_HANDOFFS) throw new ApiError('MAX_HANDOFFS_EXCEEDED', 409);
+      if ((reportRow.handoff_count ?? 0) >= MAX_HANDOFFS)
+        throw new ApiError('MAX_HANDOFFS_EXCEEDED', 409);
       await tx.query("UPDATE case_handoffs SET status='accepted',accepted_at=now() WHERE id=$1", [
         handoff.id,
       ]);

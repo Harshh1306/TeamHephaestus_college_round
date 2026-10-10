@@ -800,6 +800,99 @@ textarea::placeholder {
   accent-color: var(--teal);
   margin: 0;
 }
+.publication-settings {
+  border-top: 1px solid var(--line);
+  margin: 26px 0 18px;
+  padding-top: 22px;
+}
+.publication-settings h3,
+.publication-settings h4 {
+  margin: 0 0 10px;
+}
+.publication-settings .check-label {
+  margin: 14px 0;
+}
+.public-case-list {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+.public-case-card .panel-title {
+  align-items: flex-start;
+}
+.public-case-card .panel-title h3 {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+.public-summary {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px !important;
+  color: #e1e9ef !important;
+}
+.support-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  color: #71e1c2;
+  background: #18332e;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.public-comments {
+  border-top: 1px solid var(--line);
+  margin-top: 24px;
+  padding-top: 15px;
+}
+.public-comments h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.public-comment {
+  border: 1px solid #273747;
+  background: #151f2d;
+  border-radius: 7px;
+  padding: 10px 13px;
+  margin: 9px 0;
+}
+.public-comment small {
+  color: #7cd8bd;
+  font-size: 10px;
+}
+.public-comment p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.case-group-heading {
+  margin: 24px 0 10px !important;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 9px;
+  font-size: 14px !important;
+  color: #83cdbc;
+}
+.status-badge.urgent {
+  color: #ffd097;
+  background: #3b2d20;
+  border-color: #7e5931;
+}
+.review-public-context {
+  background: #172d2a;
+  border: 1px solid #2d594d;
+  border-radius: 8px;
+  padding: 15px;
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}
+.review-public-context strong {
+  color: #8fe5c8;
+}
+.review-public-context p {
+  margin: 5px 0 0;
+}
 .error {
   background: #371f28;
   border: 1px solid #653a45;
@@ -1140,6 +1233,14 @@ hr {
 }
 .report-text {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.case-report-copy {
+  border-block: 1px solid var(--line);
+  margin: 20px 0;
+  padding: 18px 0;
+}
+.case-report-copy h3 {
   overflow-wrap: anywhere;
 }
 .lab-control {

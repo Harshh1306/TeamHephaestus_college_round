@@ -23,6 +23,7 @@ import {
   FileCheck2,
   ScanLine,
   LoaderCircle,
+  UsersRound,
 } from 'lucide-react';
 import { keypair, seal, unseal, lockVault, unlockVault } from '../../packages/crypto/index';
 import {
@@ -39,6 +40,7 @@ import {
   type Envelope,
   type Submission,
 } from '../../packages/protocol/index';
+import PublicCases from './PublicCases';
 import {
   api,
   getPolicy,
@@ -52,11 +54,12 @@ import {
 import { verifyInclusion } from '../../packages/audit/merkle';
 import './style.css';
 
-type Page = 'home' | 'enroll' | 'report' | 'case' | 'reviewer' | 'lab' | 'privacy';
+type Page = 'home' | 'enroll' | 'report' | 'case' | 'public-cases' | 'reviewer' | 'lab' | 'privacy';
 const nav = [
   { id: 'home', label: 'Overview', icon: LayoutDashboard },
   { id: 'report', label: 'Protected report', icon: ShieldCheck },
   { id: 'case', label: 'My case', icon: MessageSquare },
+  { id: 'public-cases', label: 'Public cases', icon: UsersRound },
   { id: 'lab', label: 'Privacy Lab', icon: FlaskConical },
 ] as const;
 export default function App() {
@@ -138,17 +141,19 @@ export default function App() {
             <span>
               {page === 'home'
                 ? 'Overview'
-                : page === 'lab'
-                  ? 'Privacy Lab'
-                  : page === 'enroll'
-                    ? 'Membership'
-                    : page === 'case'
-                      ? 'Private case'
-                      : page === 'privacy'
-                        ? 'Transparency'
-                        : page === 'reviewer'
-                          ? 'Reviewer workspace'
-                          : 'Protected report'}
+                : page === 'public-cases'
+                  ? 'Public cases'
+                  : page === 'lab'
+                    ? 'Privacy Lab'
+                    : page === 'enroll'
+                      ? 'Membership'
+                      : page === 'case'
+                        ? 'Private case'
+                        : page === 'privacy'
+                          ? 'Transparency'
+                          : page === 'reviewer'
+                            ? 'Reviewer workspace'
+                            : 'Protected report'}
             </span>
           </div>
           <span className="demo-badge">SYNTHETIC DEMO</span>
@@ -179,6 +184,9 @@ export default function App() {
           )}
           {page === 'report' && <Report identity={identity} go={go} setVault={setVault} />}
           {page === 'case' && <CasePage vault={vault} setVault={setVault} />}
+          {page === 'public-cases' && (
+            <PublicCases identity={identity} onEnroll={() => go('enroll')} />
+          )}
           {page === 'reviewer' && <Reviewer />}
           {page === 'lab' && <Lab />}
           {page === 'privacy' && <Privacy />}
@@ -636,6 +644,11 @@ function Report({
     [slot, setSlot] = useState(0),
     [title, setTitle] = useState(''),
     [details, setDetails] = useState(''),
+    [shareWithMembers, setShareWithMembers] = useState(false),
+    [publicTitle, setPublicTitle] = useState(''),
+    [publicSummary, setPublicSummary] = useState(''),
+    [supportThreshold, setSupportThreshold] = useState(10),
+    [privateUntilThreshold, setPrivateUntilThreshold] = useState(false),
     [reviewed, setReviewed] = useState(false),
     [busy, setBusy] = useState(false),
     [stage, setStage] = useState(''),
@@ -681,8 +694,24 @@ function Report({
           accessVerifier: await accessVerifierFor(secret),
           replyPublicKey: replyKeys.publicKey,
           nonce,
+          ...(shareWithMembers
+            ? {
+                publication: {
+                  title: publicTitle.trim(),
+                  summary: publicSummary.trim(),
+                  supportThreshold,
+                  privateUntilThreshold,
+                },
+              }
+            : {}),
         };
-        const vault: CaseVault = { kind: 'case', secret, replyKeys, nonce };
+        const vault: CaseVault = {
+          kind: 'case',
+          secret,
+          replyKeys,
+          nonce,
+          report: { title, details },
+        };
         setStage('Generating your membership proof locally. This may take a moment…');
         const submission = await browserProof(identity, policy.snapshot, envelope);
         pending.current = { submission, vault, receiptPublicKey: policy.receiptPublicKey };
@@ -853,6 +882,72 @@ function Report({
                   />{' '}
                   I’ve reviewed my report for identifying details.
                 </label>
+                <div className="publication-settings">
+                  <h4>Share a summary with members?</h4>
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={shareWithMembers}
+                      onChange={(event) => setShareWithMembers(event.target.checked)}
+                    />
+                    Make this case visible in Public cases
+                  </label>
+                  {shareWithMembers && (
+                    <>
+                      <label>
+                        Public summary title
+                        <input
+                          maxLength={120}
+                          value={publicTitle}
+                          onChange={(event) => setPublicTitle(event.target.value)}
+                          placeholder="A short heading for members (3–120 characters)"
+                        />
+                      </label>
+                      <label>
+                        Public summary
+                        <textarea
+                          rows={5}
+                          maxLength={1000}
+                          value={publicSummary}
+                          onChange={(event) => setPublicSummary(event.target.value)}
+                          placeholder="Describe the concern without including private case details or identifying information."
+                        />
+                      </label>
+                      <p className="caption">
+                        The full report and private conversation are never shown to other members.
+                      </p>
+                      {privacyWarnings(`${publicTitle}\n${publicSummary}`).map((warning) => (
+                        <div className="warning" key={warning}>
+                          <AlertTriangle size={17} />
+                          {warning}
+                        </div>
+                      ))}
+                      <label>
+                        Support threshold
+                        <input
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={supportThreshold}
+                          onChange={(event) => setSupportThreshold(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="check-label">
+                        <input
+                          type="checkbox"
+                          checked={privateUntilThreshold}
+                          onChange={(event) => setPrivateUntilThreshold(event.target.checked)}
+                        />
+                        Keep this case in the reviewer’s Private Cases until the threshold is
+                        reached
+                      </label>
+                      <p className="caption">
+                        The reviewer can still investigate your full report privately. At the
+                        threshold, it moves to Public Cases and is marked urgent.
+                      </p>
+                    </>
+                  )}
+                </div>
               </>
             )}
             {step === 3 && (
@@ -870,6 +965,20 @@ function Report({
                   <span>Report</span>
                   <strong>{title}</strong>
                 </div>
+                <div className="summary-row">
+                  <span>Member visibility</span>
+                  <strong>
+                    {shareWithMembers
+                      ? `Public summary · urgent at ${supportThreshold} supports`
+                      : 'Private'}
+                  </strong>
+                </div>
+                {shareWithMembers && (
+                  <div className="summary-row">
+                    <span>Public summary title</span>
+                    <strong>{publicTitle}</strong>
+                  </div>
+                )}
                 <Notice>
                   Keep the encrypted case backup after acceptance. It is your way back to this
                   conversation.
@@ -898,7 +1007,15 @@ function Report({
                   className="primary"
                   disabled={
                     (step === 1 && (title.trim().length < 4 || details.trim().length < 20)) ||
-                    (step === 2 && !reviewed)
+                    (step === 2 &&
+                      (!reviewed ||
+                        (shareWithMembers &&
+                          (publicTitle.trim().length < 3 ||
+                            publicTitle.trim().length > 120 ||
+                            publicSummary.trim().length < 20 ||
+                            !Number.isInteger(supportThreshold) ||
+                            supportThreshold < 1 ||
+                            supportThreshold > 1000))))
                   }
                   onClick={() => setStep(step + 1)}
                 >
@@ -945,6 +1062,11 @@ function CasePage({
     [localMessages, setLocalMessages] = useState<Record<string, string>>({}),
     [text, setText] = useState(''),
     [reopenText, setReopenText] = useState(''),
+    [shareWithMembers, setShareWithMembers] = useState(false),
+    [publicTitle, setPublicTitle] = useState(''),
+    [publicSummary, setPublicSummary] = useState(''),
+    [supportThreshold, setSupportThreshold] = useState(10),
+    [privateUntilThreshold, setPrivateUntilThreshold] = useState(false),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [integrity, setIntegrity] = useState('');
@@ -962,6 +1084,11 @@ function CasePage({
       }
       const data = await api(`/v1/cases/${receipt!.caseId}`, 'GET', undefined, v.secret);
       setRecord(data);
+      setShareWithMembers(!!data.publicSummary);
+      setPublicTitle(data.publicTitle || '');
+      setPublicSummary(data.publicSummary || '');
+      setSupportThreshold(data.supportThreshold ?? 10);
+      setPrivateUntilThreshold(!!data.privateUntilThreshold);
       const all = await api<any[]>(
         `/v1/cases/${receipt!.caseId}/messages`,
         'GET',
@@ -1021,6 +1148,33 @@ function CasePage({
       setBusy(false);
     }
   }
+  async function savePublication() {
+    if (!vault || !record) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api(
+        `/v1/cases/${record.id}/publication`,
+        'PATCH',
+        {
+          publication: shareWithMembers
+            ? {
+                title: publicTitle.trim(),
+                summary: publicSummary.trim(),
+                supportThreshold,
+                privateUntilThreshold,
+              }
+            : null,
+        },
+        vault.secret,
+      );
+      await load();
+    } catch (cause) {
+      setError(friendly(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <Heading
@@ -1052,6 +1206,25 @@ function CasePage({
                 {record?.status || (vault.receipt ? 'submitted' : 'pending')}
               </span>
             </div>
+            <section className="case-report-copy" aria-label="Your submitted report">
+              <h4>{vault.receipt ? 'Your submitted report' : 'Your prepared report'}</h4>
+              {vault.report &&
+              typeof vault.report.title === 'string' &&
+              typeof vault.report.details === 'string' ? (
+                <>
+                  <h3>{vault.report.title}</h3>
+                  <p className="report-text">{vault.report.details}</p>
+                  <p className="caption">
+                    Your private copy is included when you download the encrypted case backup.
+                  </p>
+                </>
+              ) : (
+                <p className="caption">
+                  This older case backup does not include a copy of the original report. You can
+                  still access the case status and conversation.
+                </p>
+              )}
+            </section>
             {record?.status === 'closed' && (
               <Notice>
                 <strong>Your case is closed.</strong>
@@ -1158,6 +1331,102 @@ function CasePage({
                 {integrity && <Notice>{integrity}</Notice>}
               </>
             )}
+            {record && (
+              <div className="publication-settings">
+                <h3>Member visibility</h3>
+                <p>
+                  {record.publicSummary
+                    ? `${record.supportCount} members support this case.`
+                    : 'This case is private to your reviewer.'}
+                </p>
+                {record.publicSummary && record.supportCount >= record.supportThreshold && (
+                  <div className="success-box">
+                    Support threshold reached. The reviewer sees this as an urgent public case.
+                  </div>
+                )}
+                <label className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={shareWithMembers}
+                    onChange={(event) => setShareWithMembers(event.target.checked)}
+                  />
+                  Share a summary in Public cases
+                </label>
+                {shareWithMembers && (
+                  <>
+                    <label>
+                      Public summary title
+                      <input
+                        maxLength={120}
+                        value={publicTitle}
+                        onChange={(event) => setPublicTitle(event.target.value)}
+                        placeholder="A short heading for members (3–120 characters)"
+                      />
+                    </label>
+                    <label>
+                      Public summary
+                      <textarea
+                        rows={5}
+                        maxLength={1000}
+                        value={publicSummary}
+                        onChange={(event) => setPublicSummary(event.target.value)}
+                        placeholder="Explain the problem without sharing details that identify you."
+                      />
+                    </label>
+                    {privacyWarnings(`${publicTitle}\n${publicSummary}`).map((warning) => (
+                      <div className="warning" key={warning}>
+                        <AlertTriangle size={16} />
+                        {warning}
+                      </div>
+                    ))}
+                    <label>
+                      Support threshold
+                      <input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        value={supportThreshold}
+                        onChange={(event) => setSupportThreshold(Number(event.target.value))}
+                      />
+                    </label>
+                    <label className="check-label">
+                      <input
+                        type="checkbox"
+                        checked={privateUntilThreshold}
+                        onChange={(event) => setPrivateUntilThreshold(event.target.checked)}
+                      />
+                      Keep in reviewer Private Cases until the threshold is reached
+                    </label>
+                    <p className="caption">
+                      The reviewer can still read your full report privately. Members see only this
+                      summary and public comments.
+                    </p>
+                  </>
+                )}
+                {record.publicSummary && !shareWithMembers && (
+                  <p className="caption">
+                    Unpublishing hides the summary and comments from members. Anything previously
+                    seen may have been copied.
+                  </p>
+                )}
+                <button
+                  className="secondary"
+                  onClick={savePublication}
+                  disabled={
+                    busy ||
+                    (shareWithMembers &&
+                      (publicTitle.trim().length < 3 ||
+                        publicTitle.trim().length > 120 ||
+                        publicSummary.trim().length < 20 ||
+                        !Number.isInteger(supportThreshold) ||
+                        supportThreshold < 1 ||
+                        supportThreshold > 1000))
+                  }
+                >
+                  {busy ? 'Saving…' : 'Save visibility settings'}
+                </button>
+              </div>
+            )}
             <Backup data={vault} filename="incognito-private-case.json" />
             <p className="caption">
               This credential is only in memory until you download the encrypted backup. Closing
@@ -1241,6 +1510,9 @@ function Reviewer() {
         api<any[]>('/v1/reviewer/handoffs', 'GET', undefined, c.token),
       ]);
       setCases(caseRows);
+      setSelected((current: any) =>
+        current ? (caseRows.find((row) => row.id === current.id) ?? current) : undefined,
+      );
       setHandoffs(handoffRows);
     } catch (e) {
       setError(friendly(e));
@@ -1388,52 +1660,64 @@ function Reviewer() {
                   <p>No cases yet. Submit a protected report first.</p>
                 </div>
               )}
-              {cases.map((c) => {
+              {cases.map((c, index) => {
                 const isPending = !!c.pendingHandoff;
                 const declinedHandoffs = (c.handoffHistory || []).filter(
                   (h: any) => h.status === 'declined',
                 );
                 const lastDeclined = declinedHandoffs[declinedHandoffs.length - 1];
                 return (
-                  <button
-                    className={`case-row ${selected?.id === c.id ? 'selected' : ''} ${isPending ? 'pending-handoff' : ''}`}
-                    key={c.id}
-                    onClick={() => open(c)}
-                    title={
-                      isPending
-                        ? `Waiting for handoff acceptance by ${c.pendingHandoff.target}`
-                        : undefined
-                    }
-                  >
-                    <div>
-                      <strong>{TOPIC_LABELS[c.topic]}</strong>
-                      <small>
-                        {c.id.slice(0, 8)} · {new Date(c.createdAt).toLocaleDateString()}
-                      </small>
-                    </div>
-                    {isPending ? (
-                      <span className="status-badge pending">waiting for acceptance</span>
-                    ) : (
-                      <>
-                        <span className="status-badge">{c.status}</span>
-                        {lastDeclined && (
-                          <span
-                            className="status-badge declined"
-                            title={`Handoff declined by ${lastDeclined.target}`}
-                          >
-                            declined by {lastDeclined.target}
-                          </span>
-                        )}
-                        {c.reopenRequested && (
-                          <span className="status-badge">reopen requested</span>
-                        )}
-                        {c.handoffCount > 0 && (
-                          <span className="status-badge">handoffs: {c.handoffCount}</span>
-                        )}
-                      </>
+                  <React.Fragment key={c.id}>
+                    {(index === 0 || cases[index - 1].reviewerPublic !== c.reviewerPublic) && (
+                      <h3 className="case-group-heading">
+                        {c.reviewerPublic ? 'Public cases' : 'Private cases'}
+                      </h3>
                     )}
-                    <ChevronRight size={15} />
-                  </button>
+                    <button
+                      className={`case-row ${selected?.id === c.id ? 'selected' : ''} ${isPending ? 'pending-handoff' : ''}`}
+                      onClick={() => open(c)}
+                      title={
+                        isPending
+                          ? `Waiting for handoff acceptance by ${c.pendingHandoff.target}`
+                          : undefined
+                      }
+                    >
+                      <div>
+                        <strong>{TOPIC_LABELS[c.topic]}</strong>
+                        <small>
+                          {c.id.slice(0, 8)} · {new Date(c.createdAt).toLocaleDateString()}
+                        </small>
+                      </div>
+                      {isPending ? (
+                        <span className="status-badge pending">waiting for acceptance</span>
+                      ) : (
+                        <>
+                          <span className="status-badge">{c.status}</span>
+                          {c.publicSummary && (
+                            <span className={`status-badge ${c.publicUrgent ? 'urgent' : ''}`}>
+                              {c.publicUrgent ? 'urgent · ' : ''}
+                              {c.supportCount} supporters
+                            </span>
+                          )}
+                          {lastDeclined && (
+                            <span
+                              className="status-badge declined"
+                              title={`Handoff declined by ${lastDeclined.target}`}
+                            >
+                              declined by {lastDeclined.target}
+                            </span>
+                          )}
+                          {c.reopenRequested && (
+                            <span className="status-badge">reopen requested</span>
+                          )}
+                          {c.handoffCount > 0 && (
+                            <span className="status-badge">handoffs: {c.handoffCount}</span>
+                          )}
+                        </>
+                      )}
+                      <ChevronRight size={15} />
+                    </button>
+                  </React.Fragment>
                 );
               })}
               <h3 className="handoff-inbox-title">Incoming handoffs</h3>
@@ -1490,8 +1774,8 @@ function Reviewer() {
                     </div>
                   ) : (
                     <Notice>
-                      This is an encrypted, minimum-necessary handoff summary. The original
-                      report remains with the source department.
+                      This is an encrypted, minimum-necessary handoff summary. The original report
+                      remains with the source department.
                     </Notice>
                   )}
                   {selectedHandoff.status === 'approved' && (
@@ -1558,13 +1842,42 @@ function Reviewer() {
                     </div>
                   </div>
                   <p className="report-text">{content.details}</p>
+                  {selected.publicSummary && (
+                    <div className="review-public-context">
+                      <strong>
+                        {selected.publicUrgent
+                          ? 'Urgent public case'
+                          : selected.reviewerPublic
+                            ? 'Public case'
+                            : 'Private reviewer case · shared with members'}
+                      </strong>
+                      <p>
+                        {selected.supportCount} verified members support this case
+                        {selected.supportThreshold
+                          ? ` · threshold ${selected.supportThreshold}`
+                          : ''}
+                        .
+                      </p>
+                      {selected.publicTitle && (
+                        <p>
+                          <span className="caption">Public summary title:</span>{' '}
+                          {selected.publicTitle}
+                        </p>
+                      )}
+                      <p>
+                        <span className="caption">Member-visible summary:</span>{' '}
+                        {selected.publicSummary}
+                      </p>
+                    </div>
+                  )}
                   {selected.pendingHandoff ? (
                     <Notice>
                       <strong>Waiting for handoff acceptance.</strong>
                       <p>
                         This case was forwarded to {selected.pendingHandoff.target} on{' '}
-                        {new Date(selected.pendingHandoff.createdAt).toLocaleDateString()}. All actions
-                        on this case are locked until the destination department accepts or declines.
+                        {new Date(selected.pendingHandoff.createdAt).toLocaleDateString()}. All
+                        actions on this case are locked until the destination department accepts or
+                        declines.
                       </p>
                     </Notice>
                   ) : (
@@ -1575,7 +1888,8 @@ function Reviewer() {
                           <span>
                             Handoffs: {selected.handoffCount || 0} / {MAX_HANDOFFS}
                           </span>
-                          {selected.handoffHistory?.filter((h: any) => h.status === 'accepted').length > 0 && (
+                          {selected.handoffHistory?.filter((h: any) => h.status === 'accepted')
+                            .length > 0 && (
                             <span>
                               (Custody:{' '}
                               {selected.handoffHistory
@@ -1585,7 +1899,8 @@ function Reviewer() {
                               )
                             </span>
                           )}
-                          {selected.handoffHistory?.filter((h: any) => h.status === 'declined').length > 0 && (
+                          {selected.handoffHistory?.filter((h: any) => h.status === 'declined')
+                            .length > 0 && (
                             <span style={{ color: '#fca5a5' }}>
                               (Declined by:{' '}
                               {selected.handoffHistory
@@ -1597,7 +1912,8 @@ function Reviewer() {
                           )}
                         </div>
                       </div>
-                      {selected.handoffHistory?.filter((h: any) => h.status === 'declined').length > 0 && (
+                      {selected.handoffHistory?.filter((h: any) => h.status === 'declined').length >
+                        0 && (
                         <div className="warning" style={{ margin: '8px 0' }}>
                           <AlertTriangle size={16} />
                           <div>
@@ -1607,7 +1923,8 @@ function Reviewer() {
                                 .filter((h: any) => h.status === 'declined')
                                 .map((h: any) => h.target)
                                 .join(', ')}{' '}
-                              declined custody of this case. You retain ownership. Re-forwarding to previously declined departments is disabled.
+                              declined custody of this case. You retain ownership. Re-forwarding to
+                              previously declined departments is disabled.
                             </p>
                           </div>
                         </div>
@@ -1616,209 +1933,222 @@ function Reviewer() {
                         Member eligibility is verified. Reported allegations require independent
                         investigation.
                       </Notice>
+                      <section className="reviewer-follow-up">
+                        <h4>Anonymous follow-up</h4>
+                        {messages.map((m) => (
+                          <div className="message" key={m.id}>
+                            <small>{m.direction}</small>
+                            <p>{m.text}</p>
+                          </div>
+                        ))}
+                        <label>
+                          Reply to reporter
+                          <textarea
+                            rows={3}
+                            maxLength={5000}
+                            value={reply}
+                            onChange={(e) => setReply(e.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="primary"
+                          disabled={!reply.trim()}
+                          onClick={async () => {
+                            try {
+                              await api(
+                                `/v1/reviewer/cases/${selected.id}/messages`,
+                                'POST',
+                                {
+                                  id: crypto.randomUUID(),
+                                  ciphertext: await seal(reply, selected.replyPublicKey),
+                                },
+                                credentials.token,
+                              );
+                              setReply('');
+                              await open(selected);
+                            } catch (e) {
+                              setError(friendly(e));
+                            }
+                          }}
+                        >
+                          Send encrypted question <ArrowRight size={16} />
+                        </button>
+                      </section>
+                      <hr />
                       {(selected.handoffCount || 0) >= MAX_HANDOFFS ? (
                         <Notice>
                           <strong>Maximum handoff limit reached ({MAX_HANDOFFS}).</strong>
                           <p>
-                            This case has reached the maximum permitted transfers and cannot be forwarded
-                            further.
+                            This case has reached the maximum permitted transfers and cannot be
+                            forwarded further.
                           </p>
                         </Notice>
-                      ) : (() => {
-                        const declinedDeptIds = new Set(
-                          (selected.handoffHistory || [])
-                            .filter((h: any) => h.status === 'declined')
-                            .map((h: any) => h.targetDepartment || h.target),
-                        );
-                        const availableDepts = Object.entries(DEPARTMENT_LABELS).filter(
-                          ([id]) => id !== selected.department,
-                        );
-                        const allAvailableDeclined =
-                          availableDepts.length > 0 &&
-                          availableDepts.every(([id]) => declinedDeptIds.has(id));
-
-                        if (allAvailableDeclined) {
-                          return (
-                            <Notice>
-                              <strong>All other departments have declined this case.</strong>
-                              <p>
-                                Every available department has previously declined custody of this
-                                report. It must be investigated or resolved within your department.
-                              </p>
-                            </Notice>
+                      ) : (
+                        (() => {
+                          const declinedDeptIds = new Set(
+                            (selected.handoffHistory || [])
+                              .filter((h: any) => h.status === 'declined')
+                              .map((h: any) => h.targetDepartment || h.target),
                           );
-                        }
+                          const availableDepts = Object.entries(DEPARTMENT_LABELS).filter(
+                            ([id]) => id !== selected.department,
+                          );
+                          const allAvailableDeclined =
+                            availableDepts.length > 0 &&
+                            availableDepts.every(([id]) => declinedDeptIds.has(id));
 
-                        return (
-                          <section className="handoff-composer">
-                            <h4>Forward to another department</h4>
-                            <p className="caption">
-                              Share an encrypted, minimum-necessary summary directly with another department.
-                              The original report stays in this department until accepted.
-                            </p>
-                            <label>
-                              Destination department
-                              <select
-                                value={handoffTarget}
-                                onChange={(event) => setHandoffTarget(event.target.value)}
-                              >
-                                <option value="">Choose a department</option>
-                                {availableDepts.map(([id, label]) => {
-                                  const isDeclined = declinedDeptIds.has(id);
-                                  return (
-                                    <option key={id} value={id} disabled={isDeclined}>
-                                      {label} {isDeclined ? ' (declined — cannot re-forward)' : ''}
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                            </label>
-                            <label>
-                              Encrypted handoff summary
-                              <textarea
-                                rows={3}
-                                maxLength={5000}
-                                value={handoffSummary}
-                                onChange={(event) => setHandoffSummary(event.target.value)}
-                                placeholder="Share only what the other department needs to act."
-                              />
-                            </label>
-                            <button
-                              className="secondary small"
-                              disabled={!handoffTarget || !handoffSummary.trim() || declinedDeptIds.has(handoffTarget)}
-                              onClick={async () => {
-                                try {
-                                  const policy = await getPolicy();
-                                  const destination = policy.departments.find(
-                                    (department) => department.id === handoffTarget,
-                                  );
-                                  if (!destination) throw new Error('That department is unavailable.');
-                                  const summary = handoffSummary.trim();
-                                  await api(
-                                    `/v1/reviewer/cases/${selected.id}/handoffs`,
-                                    'POST',
-                                    {
-                                      targetDepartment: destination.id,
-                                      summaryCiphertext: await seal(
-                                        JSON.stringify({
-                                          title: content?.title || `Case ${selected.id.slice(0, 8)}`,
-                                          details: summary,
-                                        }),
-                                        destination.publicKey,
-                                      ),
-                                    },
-                                    credentials.token,
-                                  );
-                                  setHandoffSummary('');
-                                  setHandoffTarget('');
-                                  await open(selected);
-                                } catch (e) {
-                                  setError(friendly(e));
-                                }
-                              }}
-                            >
-                              Forward to department <ArrowRight size={16} />
-                            </button>
-                          </section>
-                        );
-                      })()}
-                  {selected.reopenRequested && (
-                    <Notice>
-                      <strong>Reporter requested a reopen.</strong>
-                      {selected.reopenReason && <p>{selected.reopenReason}</p>}
-                    </Notice>
-                  )}
-                  {selected.status !== 'closed' &&
-                    (transitions[selected.status] || []).includes('closed') && (
-                      <label>
-                        Closure summary (required when closing)
-                        <textarea
-                          rows={3}
-                          maxLength={5000}
-                          value={closureReason}
-                          onChange={(e) => setClosureReason(e.target.value)}
-                          placeholder="Explain what was done and why this case is being closed."
-                        />
-                      </label>
-                    )}
-                  <div className="toolbar">
-                    {(transitions[selected.status] || []).map((s) => (
-                      <button
-                        className="secondary small"
-                        key={s}
-                        onClick={async () => {
-                          try {
-                            await api(
-                              `/v1/reviewer/cases/${selected.id}/status`,
-                              'PATCH',
-                              {
-                                status: s,
-                                ...(s === 'closed' ? { reason: closureReason.trim() } : {}),
-                              },
-                              credentials.token,
+                          if (allAvailableDeclined) {
+                            return (
+                              <Notice>
+                                <strong>All other departments have declined this case.</strong>
+                                <p>
+                                  Every available department has previously declined custody of this
+                                  report. It must be investigated or resolved within your
+                                  department.
+                                </p>
+                              </Notice>
                             );
-                            setSelected({
-                              ...selected,
-                              status: s,
-                              reopenRequested:
-                                s === 'under-review' ? false : selected.reopenRequested,
-                            });
-                            setClosureReason('');
-                            await load();
-                          } catch (e) {
-                            setError(friendly(e));
                           }
-                        }}
-                        disabled={s === 'closed' && !closureReason.trim()}
-                      >
-                        {s.replaceAll('-', ' ')}
-                      </button>
-                    ))}
-                  </div>
-                  <hr />
-                  <h4>Anonymous follow-up</h4>
-                  {messages.map((m) => (
-                    <div className="message" key={m.id}>
-                      <small>{m.direction}</small>
-                      <p>{m.text}</p>
-                    </div>
-                  ))}
-                  <label>
-                    Reply to reporter
-                    <textarea
-                      rows={3}
-                      maxLength={5000}
-                      value={reply}
-                      onChange={(e) => setReply(e.target.value)}
-                    />
-                  </label>
-                  <button
-                    className="primary"
-                    disabled={!reply.trim()}
-                    onClick={async () => {
-                      try {
-                        await api(
-                          `/v1/reviewer/cases/${selected.id}/messages`,
-                          'POST',
-                          {
-                            id: crypto.randomUUID(),
-                            ciphertext: await seal(reply, selected.replyPublicKey),
-                          },
-                          credentials.token,
-                        );
-                        setReply('');
-                        await open(selected);
-                      } catch (e) {
-                        setError(friendly(e));
-                      }
-                    }}
-                  >
-                    Send encrypted question <ArrowRight size={16} />
-                  </button>
+
+                          return (
+                            <section className="handoff-composer">
+                              <h4>Forward to another department</h4>
+                              <p className="caption">
+                                Share an encrypted, minimum-necessary summary directly with another
+                                department. The original report stays in this department until
+                                accepted.
+                              </p>
+                              <label>
+                                Destination department
+                                <select
+                                  value={handoffTarget}
+                                  onChange={(event) => setHandoffTarget(event.target.value)}
+                                >
+                                  <option value="">Choose a department</option>
+                                  {availableDepts.map(([id, label]) => {
+                                    const isDeclined = declinedDeptIds.has(id);
+                                    return (
+                                      <option key={id} value={id} disabled={isDeclined}>
+                                        {label}{' '}
+                                        {isDeclined ? ' (declined — cannot re-forward)' : ''}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                              </label>
+                              <label>
+                                Encrypted handoff summary
+                                <textarea
+                                  rows={3}
+                                  maxLength={5000}
+                                  value={handoffSummary}
+                                  onChange={(event) => setHandoffSummary(event.target.value)}
+                                  placeholder="Share only what the other department needs to act."
+                                />
+                              </label>
+                              <button
+                                className="secondary small"
+                                disabled={
+                                  !handoffTarget ||
+                                  !handoffSummary.trim() ||
+                                  declinedDeptIds.has(handoffTarget)
+                                }
+                                onClick={async () => {
+                                  try {
+                                    const policy = await getPolicy();
+                                    const destination = policy.departments.find(
+                                      (department) => department.id === handoffTarget,
+                                    );
+                                    if (!destination)
+                                      throw new Error('That department is unavailable.');
+                                    const summary = handoffSummary.trim();
+                                    await api(
+                                      `/v1/reviewer/cases/${selected.id}/handoffs`,
+                                      'POST',
+                                      {
+                                        targetDepartment: destination.id,
+                                        summaryCiphertext: await seal(
+                                          JSON.stringify({
+                                            title:
+                                              content?.title || `Case ${selected.id.slice(0, 8)}`,
+                                            details: summary,
+                                          }),
+                                          destination.publicKey,
+                                        ),
+                                      },
+                                      credentials.token,
+                                    );
+                                    setHandoffSummary('');
+                                    setHandoffTarget('');
+                                    await open(selected);
+                                  } catch (e) {
+                                    setError(friendly(e));
+                                  }
+                                }}
+                              >
+                                Forward to department <ArrowRight size={16} />
+                              </button>
+                            </section>
+                          );
+                        })()
+                      )}
+                      {selected.reopenRequested && (
+                        <Notice>
+                          <strong>Reporter requested a reopen.</strong>
+                          {selected.reopenReason && <p>{selected.reopenReason}</p>}
+                        </Notice>
+                      )}
+                      {selected.status !== 'closed' &&
+                        (transitions[selected.status] || []).includes('closed') && (
+                          <label>
+                            Closure summary (required when closing)
+                            <textarea
+                              rows={3}
+                              maxLength={5000}
+                              value={closureReason}
+                              onChange={(e) => setClosureReason(e.target.value)}
+                              placeholder="Explain what was done and why this case is being closed."
+                            />
+                          </label>
+                        )}
+                      <div className="toolbar">
+                        {(transitions[selected.status] || []).map((s) => (
+                          <button
+                            className="secondary small"
+                            key={s}
+                            onClick={async () => {
+                              try {
+                                await api(
+                                  `/v1/reviewer/cases/${selected.id}/status`,
+                                  'PATCH',
+                                  {
+                                    status: s,
+                                    ...(s === 'closed' ? { reason: closureReason.trim() } : {}),
+                                  },
+                                  credentials.token,
+                                );
+                                setSelected({
+                                  ...selected,
+                                  status: s,
+                                  reopenRequested:
+                                    s === 'under-review' ? false : selected.reopenRequested,
+                                });
+                                setClosureReason('');
+                                await load();
+                              } catch (e) {
+                                setError(friendly(e));
+                              }
+                            }}
+                            disabled={s === 'closed' && !closureReason.trim()}
+                          >
+                            {s.replaceAll('-', ' ')}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
-              )}
-            </>
-          ) : (
+              ) : (
                 <div className="empty">
                   <LockKeyhole size={36} />
                   <h3>Select a case to decrypt.</h3>
