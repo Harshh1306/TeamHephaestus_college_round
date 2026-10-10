@@ -32,6 +32,8 @@ Envelope encoding, in exact order:
  slot, keyVersion, ciphertext, accessVerifier, replyPublicKey, nonce]
 ```
 
+For a member-public report, append a nested array `[summary, supportThreshold, privateUntilThreshold, title]`. For older public reports without a title, this nested array has only the first three elements. Private reports append nothing. This preserves the exact commitment bytes of existing reports while binding new public titles to their proofs and receipts.
+
 `message = fieldHash(JSON.stringify(["incognito:message:v1", canonicalEnvelope]))`
 
 `commitment = SHA256(JSON.stringify(["incognito:receipt:v1", canonicalEnvelope]))`
@@ -39,6 +41,8 @@ Envelope encoding, in exact order:
 `accessVerifier = SHA256(JSON.stringify(["incognito:case-access:v1", secret]))`
 
 The private case secret and client nonce are independent 256-bit random values. The browser also generates a fresh Curve25519 reply keypair per case. It encrypts report JSON to the pinned-by-configuration reviewer public key. Public-key authenticity ultimately depends on trusted client/configuration delivery in this demo.
+
+New case vaults also retain a local copy of the original report title and details. That copy is included inside the password-encrypted backup and is not part of the API submission payload. Older case vaults remain usable without a local report copy.
 
 `generateProof(identity, group, message, scope, 6, localArtifacts)` produces the actual Semaphore proof. The client identity is never an argument to the submission API.
 

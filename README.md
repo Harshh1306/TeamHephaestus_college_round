@@ -35,12 +35,15 @@ Do not publish `.local`, identity seeds, case backups, or reviewer credentials. 
 
 1. **Membership:** enter an unused `rollNumber` and `password` from `.local/demo-credentials.json`, or expand “Use a synthetic seed for testing” and paste Alice’s `secret`. Download an encrypted membership backup with a passphrase of at least 12 characters.
 2. **Protected report:** choose a category and slot, enter a synthetic report, review privacy hints, and submit. The browser generates the ZK proof in a worker and sends only ciphertext and public proof inputs.
+   You can optionally publish a separate summary to verified members, set a support threshold, and keep reviewer public priority private until that threshold.
 3. **Private case:** download the encrypted case backup. Its independent secret and decryption key are your route back after closing the tab.
-4. **Reviewer workspace:** paste a department reviewer credential from `.local/reviewers`. Open a case owned by that department, decrypt locally, triage it, and send an encrypted question. Multiple synthetic reviewers share each department's demonstration inbox.
-5. **My case:** the reporter can decrypt that question and reply without institutional login. Reviewer credentials are cleared when leaving the reviewer screen; identity and case secrets stay only in the open app’s memory.
-6. **Department handoff:** an owning reviewer writes a minimum-necessary encrypted summary for another department. The reporter approves or declines anonymously; only an approved summary appears in the destination department's handoff inbox, where it is explicitly acknowledged.
-7. **Privacy Lab:** run the security checks. The lab creates fresh synthetic identities and a separate in-memory PostgreSQL engine; it does not touch demo cases.
-8. **Blockchain:** in another terminal run `npm run chain:node`; with the API running and at least one accepted report, run `npm run chain:demo`. Return to My case and Verify receipt to check the signature, Merkle inclusion and local chain root.
+   My case also lets you edit or unpublish the member-visible summary and see its support count.
+4. **Public cases:** with a membership credential active, browse summaries, support a case once, and optionally leave one public comment. The full report stays private. A threshold-reaching case becomes urgent in the reviewer Public cases group; before that, the reviewer can still see its full report under Private cases.
+5. **Reviewer workspace:** paste a department reviewer credential from `.local/reviewers`. Open a case owned by that department, decrypt locally, triage it, and send an encrypted question. Multiple synthetic reviewers share each department's demonstration inbox.
+6. **My case:** the reporter can decrypt that question and reply without institutional login. Reviewer credentials are cleared when leaving the reviewer screen; identity and case secrets stay only in the open app’s memory.
+7. **Department handoff:** an owning reviewer writes a minimum-necessary encrypted summary for another department. The reporter approves or declines anonymously; only an approved summary appears in the destination department's handoff inbox, where it is explicitly acknowledged.
+8. **Privacy Lab:** run the security checks. The lab creates fresh synthetic identities and a separate in-memory PostgreSQL engine; it does not touch demo cases.
+9. **Blockchain:** in another terminal run `npm run chain:node`; with the API running and at least one accepted report, run `npm run chain:demo`. Return to My case and Verify receipt to check the signature, Merkle inclusion and local chain root.
 
 The public testnet has **not** been deployed. `chain:demo` refuses any chain other than the local chain ID 31337 and uses its development accounts. It writes no complaint text, case IDs, credentials or nullifiers on-chain. Hardhat state resets when its node restarts; re-run `chain:demo` to deploy and anchor again.
 

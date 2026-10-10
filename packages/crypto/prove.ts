@@ -2,6 +2,11 @@ import { Identity } from '@semaphore-protocol/identity';
 import { Group } from '@semaphore-protocol/group';
 import { generateProof } from '@semaphore-protocol/proof';
 import {
+  publicSignalMessage,
+  publicSignalScope,
+  type PublicSignal,
+} from '../protocol/public-cases';
+import {
   messageFor,
   scopeFor,
   type Envelope,
@@ -28,4 +33,25 @@ export async function prove(
     { wasm: `${root}/semaphore-6.wasm`, zkey: `${root}/semaphore-6.zkey` },
   );
   return { envelope, proof } as Submission;
+}
+
+export async function provePublicSignal(
+  secret: string,
+  snapshot: Snapshot,
+  signal: PublicSignal,
+  browser = false,
+) {
+  const identity = new Identity(secret);
+  const group = new Group(snapshot.members);
+  if (group.root.toString() !== snapshot.root || group.indexOf(identity.commitment) < 0)
+    throw new Error('This credential is not in the current authorized membership group.');
+  const root = browser ? '/artifacts' : 'public/artifacts';
+  return generateProof(
+    identity,
+    group,
+    await publicSignalMessage(signal),
+    await publicSignalScope(signal),
+    6,
+    { wasm: `${root}/semaphore-6.wasm`, zkey: `${root}/semaphore-6.zkey` },
+  );
 }

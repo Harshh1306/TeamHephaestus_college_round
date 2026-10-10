@@ -6,7 +6,10 @@ import {
   type Submission,
   type Envelope,
   type Receipt,
+  type ProofSchema,
 } from '../../packages/protocol/index';
+import type { PublicSignal } from '../../packages/protocol/public-cases';
+import type { z } from 'zod';
 export type Policy = {
   period: string;
   departments: { id: DepartmentId; label: string; publicKey: string }[];
@@ -89,12 +92,38 @@ export function browserProof(
     worker.postMessage({ secret, snapshot, envelope });
   });
 }
+export function browserPublicProof(
+  secret: string,
+  snapshot: Snapshot,
+  publicSignal: PublicSignal,
+): Promise<z.infer<typeof ProofSchema>> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./proof.worker.ts', import.meta.url), { type: 'module' });
+    const timeout = setTimeout(() => {
+      worker.terminate();
+      reject(new Error('Membership proof timed out. Please try again.'));
+    }, 180000);
+    worker.onmessage = (event) => {
+      clearTimeout(timeout);
+      worker.terminate();
+      event.data.error ? reject(new Error(event.data.error)) : resolve(event.data.proof);
+    };
+    worker.onerror = () => {
+      clearTimeout(timeout);
+      worker.terminate();
+      reject(new Error('Could not generate the membership proof.'));
+    };
+    worker.postMessage({ secret, snapshot, publicSignal });
+  });
+}
 export type CaseVault = {
   kind: 'case';
   secret: string;
   replyKeys: { publicKey: string; privateKey: string };
   nonce: string;
   receipt?: Receipt;
+  /** Private local copy, included only in the encrypted case backup, never an API payload. */
+  report?: { title: string; details: string };
 };
 export const friendly = (error: unknown) => {
   const raw = error instanceof Error ? error.message : String(error);
@@ -122,6 +151,9 @@ export const friendly = (error: unknown) => {
     HANDOFF_PENDING: 'A handoff is currently pending acceptance for this case.',
     'Membership snapshot authentication failed.':
       'The membership snapshot signature did not match the authority key. Restart your local server to resync.',
+    CASE_NOT_PUBLIC: 'This case is no longer shared with members.',
+    ALREADY_SUPPORTED: 'Your membership has already supported this case.',
+    ALREADY_COMMENTED: 'Your membership has already commented on this case.',
   };
   return messages[raw] || raw;
 };

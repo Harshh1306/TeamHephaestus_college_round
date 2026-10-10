@@ -59,6 +59,20 @@ components:
         accessVerifier: { type: string, pattern: '^[0-9a-f]{64}$' }
         replyPublicKey: { type: string, pattern: '^[0-9a-f]{64}$' }
         nonce: { type: string, pattern: '^[0-9a-f]{64}$' }
+        publication: { $ref: '#/components/schemas/Publication' }
+    Publication:
+      type: object
+      additionalProperties: false
+      required: [summary, supportThreshold, privateUntilThreshold]
+      properties:
+        title:
+          type: string
+          minLength: 3
+          maxLength: 120
+          description: Public heading; optional for compatibility with previously signed reports.
+        summary: { type: string, minLength: 20, maxLength: 1000 }
+        supportThreshold: { type: integer, minimum: 1, maximum: 1000 }
+        privateUntilThreshold: { type: boolean }
     Proof:
       type: object
       additionalProperties: false
@@ -159,8 +173,85 @@ paths:
     get:
       security: [{ caseSecret: [] }]
       responses:
-        '200': { description: Authorized case status and original receipt }
+        '200': { description: Authorized case status, original receipt and public support settings }
         '403': { description: ACCESS_DENIED }
+  /v1/cases/{id}/publication:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      security: [{ caseSecret: [] }]
+      description: Publish or edit a member-visible summary; null unpublishes it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [publication]
+              properties:
+                publication:
+                  oneOf:
+                    - { $ref: '#/components/schemas/Publication' }
+                    - { type: 'null' }
+      responses:
+        '200': { description: Visibility updated }
+        '403': { description: ACCESS_DENIED }
+  /v1/public-cases/list:
+    post:
+      description: Requires a fresh current-root Semaphore proof; returns public summaries and comments only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nonce, proof]
+              properties:
+                nonce: { type: string, pattern: '^[0-9a-f]{64}$' }
+                proof: { $ref: '#/components/schemas/Proof' }
+      responses:
+        '200':
+          { description: Member-visible summaries, support counts and comments; no full reports }
+        '400': { description: Invalid or missing membership proof }
+  /v1/public-cases/{id}/support:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      description: One anonymous support per credential per case, enforced by a case-scoped nullifier.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [proof]
+              properties:
+                proof: { $ref: '#/components/schemas/Proof' }
+      responses:
+        '200': { description: Current support count }
+        '409': { description: ALREADY_SUPPORTED }
+  /v1/public-cases/{id}/comments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      description: One public comment per credential per case; proof is bound to the exact text.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text, proof]
+              properties:
+                text: { type: string, minLength: 3, maxLength: 800 }
+                proof: { $ref: '#/components/schemas/Proof' }
+      responses:
+        '200': { description: Public comment stored }
+        '409': { description: ALREADY_COMMENTED }
   /v1/cases/{id}/messages:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }

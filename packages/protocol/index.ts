@@ -75,6 +75,15 @@ export const ProofSchema = z
     points: z.tuple([decimal, decimal, decimal, decimal, decimal, decimal, decimal, decimal]),
   })
   .strict();
+export const PublicationSchema = z
+  .object({
+    // Optional for reports and receipts created before summary titles were introduced.
+    title: z.string().trim().min(3).max(120).optional(),
+    summary: z.string().trim().min(20).max(1000),
+    supportThreshold: z.number().int().min(1).max(1000),
+    privateUntilThreshold: z.boolean(),
+  })
+  .strict();
 export const EnvelopeSchema = z
   .object({
     protocolVersion: z.literal(PROTOCOL),
@@ -92,6 +101,7 @@ export const EnvelopeSchema = z
     accessVerifier: hex,
     replyPublicKey: hex,
     nonce: hex,
+    publication: PublicationSchema.optional(),
   })
   .strict();
 export const SubmissionSchema = z.object({ envelope: EnvelopeSchema, proof: ProofSchema }).strict();
@@ -130,7 +140,7 @@ export async function fieldHash(value: string) {
 }
 export const currentPeriod = (now = new Date()) => now.toISOString().slice(0, 7);
 export function canonicalEnvelope(e: Envelope) {
-  return JSON.stringify([
+  const fields: unknown[] = [
     e.protocolVersion,
     e.organizationId,
     e.topicId,
@@ -142,7 +152,18 @@ export function canonicalEnvelope(e: Envelope) {
     e.accessVerifier,
     e.replyPublicKey,
     e.nonce,
-  ]);
+  ];
+  // Keep receipts for existing, private reports byte-for-byte compatible.
+  if (e.publication) {
+    const publication: unknown[] = [
+      e.publication.summary,
+      e.publication.supportThreshold,
+      e.publication.privateUntilThreshold,
+    ];
+    if (e.publication.title !== undefined) publication.push(e.publication.title);
+    fields.push(publication);
+  }
+  return JSON.stringify(fields);
 }
 export const messageFor = (e: Envelope) =>
   fieldHash(JSON.stringify(['incognito:message:v1', canonicalEnvelope(e)]));
