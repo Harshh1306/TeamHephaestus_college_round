@@ -120,6 +120,8 @@ export const friendly = (error: unknown) => {
       'This department previously declined this case and cannot be chosen again.',
     MAX_HANDOFFS_EXCEEDED: 'The maximum number of handoffs for this case has been reached.',
     HANDOFF_PENDING: 'A handoff is currently pending acceptance for this case.',
+    'Membership snapshot authentication failed.':
+      'The membership snapshot signature did not match the authority key. Restart your local server to resync.',
   };
   return messages[raw] || raw;
 };

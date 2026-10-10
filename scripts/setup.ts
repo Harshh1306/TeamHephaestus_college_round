@@ -14,36 +14,43 @@ import {
 } from '../packages/protocol/index';
 import { signText } from '../packages/server/signatures';
 import { hashPassword } from '../packages/server/passwords';
-try {
-  await access('.local/reporting-config.json');
-  const ledgerPath = '.local/authority/ledger.json';
-  const credentialsPath = '.local/demo-credentials.json';
-  const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
-  if (ledger.members.some((member: { token?: string }) => member.token)) {
-    const credentials = JSON.parse(await readFile(credentialsPath, 'utf8'));
-    const passwords = new Map<string, string>();
-    ledger.members = ledger.members.map(
-      (member: { id: string; token?: string; passwordHash?: string }) => {
-        if (!member.token) return member;
-        passwords.set(member.id, member.token);
-        const { token, ...rest } = member;
-        return { ...rest, passwordHash: hashPassword(token) };
-      },
-    );
-    credentials.enrollment = credentials.enrollment.map((entry: { id: string }) => ({
-      rollNumber: entry.id,
-      password: passwords.get(entry.id),
-    }));
-    await writeFile(credentialsPath + '.tmp', JSON.stringify(credentials, null, 2));
-    await rename(credentialsPath + '.tmp', credentialsPath);
-    await writeFile(ledgerPath + '.tmp', JSON.stringify(ledger, null, 2));
-    await rename(ledgerPath + '.tmp', ledgerPath);
-    console.log('Migrated existing synthetic invitations to roll-number/password enrollment.');
+const force = process.argv.includes('--force') || process.argv.includes('--reset');
+if (!force) {
+  try {
+    await access('.local/reporting-config.json');
+    const ledgerPath = '.local/authority/ledger.json';
+    const credentialsPath = '.local/demo-credentials.json';
+    const ledger = JSON.parse(await readFile(ledgerPath, 'utf8'));
+    if (ledger.members.some((member: { token?: string }) => member.token)) {
+      const credentials = JSON.parse(await readFile(credentialsPath, 'utf8'));
+      const passwords = new Map<string, string>();
+      ledger.members = ledger.members.map(
+        (member: { id: string; token?: string; passwordHash?: string }) => {
+          if (!member.token) return member;
+          passwords.set(member.id, member.token);
+          const { token, ...rest } = member;
+          return { ...rest, passwordHash: hashPassword(token) };
+        },
+      );
+      credentials.enrollment = credentials.enrollment.map((entry: { id: string }) => ({
+        rollNumber: entry.id,
+        password: passwords.get(entry.id),
+      }));
+      await writeFile(credentialsPath + '.tmp', JSON.stringify(credentials, null, 2));
+      await rename(credentialsPath + '.tmp', credentialsPath);
+      await writeFile(ledgerPath + '.tmp', JSON.stringify(ledger, null, 2));
+      await rename(ledgerPath + '.tmp', ledgerPath);
+      console.log('Migrated existing synthetic invitations to roll-number/password enrollment.');
+    }
+    console.log('Setup already exists. Existing identities and cases were preserved.');
+    console.log('Run `npm run setup -- --reset` if you need to regenerate demo keys from scratch.');
+    process.exit(0);
+  } catch {
+    /* Fresh demo. */
   }
-  console.log('Setup already exists. Existing identities and cases were preserved.');
-  process.exit(0);
-} catch {
-  /* Fresh demo. */
+} else {
+  const { rm } = await import('node:fs/promises');
+  await rm('.local/reporting-db', { recursive: true, force: true });
 }
 await mkdir('.local/authority', { recursive: true });
 await mkdir('.local/reviewer', { recursive: true });

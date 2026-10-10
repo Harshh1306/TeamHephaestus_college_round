@@ -91,8 +91,10 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
     const [row] = await tx.query<{ snapshot: Snapshot }>(
       `SELECT snapshot FROM group_state WHERE id=1${lock ? ' FOR UPDATE' : ''}`,
     );
-    if (!row) throw new ApiError('GROUP_UNAVAILABLE', 503);
-    return row.snapshot;
+    if (row && validSnapshot(row.snapshot, config.authorityPublicKey)) {
+      return row.snapshot;
+    }
+    return config.snapshot;
   }
   async function installSnapshot(snapshot: Snapshot) {
     if (!validSnapshot(snapshot, config.authorityPublicKey))
@@ -110,8 +112,13 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       );
     });
   }
-  if (!(await db.query('SELECT id FROM group_state WHERE id=1')).length)
+  const [existingGroup] = await db.query<{ epoch: number; snapshot: Snapshot }>(
+    'SELECT epoch,snapshot FROM group_state WHERE id=1',
+  );
+  if (!existingGroup || !validSnapshot(existingGroup.snapshot, config.authorityPublicKey)) {
+    await db.query('DELETE FROM group_state WHERE id=1');
     await installSnapshot(config.snapshot);
+  }
   app.get('/v1/health', async () => ({
     ok: true,
     mode: 'synthetic-demo',
