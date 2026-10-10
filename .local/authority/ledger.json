@@ -1,0 +1,110 @@
+{
+  "epoch": 5,
+  "members": [
+    {
+      "id": "student-01",
+      "passwordHash": "scrypt:2a59e866155bd1f81c7d1ecacb764e22:413765ac30fd9f767d4b78a3dd8a115773273f7f27759d3057f8a55e6b4c393c",
+      "commitment": "21340108091736430700551609257900313267283036466974130523736138616750194524330"
+    },
+    {
+      "id": "student-02",
+      "passwordHash": "scrypt:ee24b20f3a4b545b94ed9fcbe08c443d:a6ccebfb0bfa59061811b0c2a38395b50712296fd5e3e2b681f9caa25da80345",
+      "commitment": "13433885455528104087626775694150740913495515865765413627675118565647514185596"
+    },
+    {
+      "id": "student-03",
+      "passwordHash": "scrypt:b37c4c72595981effdf33fe28c4eaabc:2d07b74804a8a9442f43181f1be0add5102cd9aa413332dae2082d68acea14aa",
+      "commitment": "1428264727224914281412840119346792214480533363939787095181395315723253825186"
+    },
+    {
+      "id": "student-04",
+      "passwordHash": "scrypt:19fcfe660c53db59e29940d40896f291:393063f1a09a51766d6a6e2bcac8d78c7d3836f3922f08818a82a13399d9b8a6",
+      "commitment": "7441552043319107374948591350600914110898616286915935442580807629682683597382"
+    },
+    {
+      "id": "student-05",
+      "passwordHash": "scrypt:aff3022432380c75c37d2867df2158eb:3ac27250db9014977fc9f9c24b8cbfbf646e1d2664f3c1d6beb7d3b63f60f11f",
+      "commitment": "9182480624721578639617533221586141787426603442185115797873030316963085819555"
+    },
+    {
+      "id": "student-06",
+      "passwordHash": "scrypt:1f735bbc55a494a88c0bc987e888e913:32e6954ebb5feb28baa1db85519499768a74628c6d368a4d29bfdaffbb00f641",
+      "commitment": "5321932332725058944417439260991783699231267420110534023185210983148841380495"
+    },
+    {
+      "id": "student-07",
+      "passwordHash": "scrypt:37ada837d5921f9ec6b8bd7f73f0fcff:5d4b36ee4e264ac24c587204b403380f3c7a96ab2110796da32c980276b8f34d",
+      "commitment": "503618508312393738294761227107333526131843217692633203080661981983717868357"
+    },
+    {
+      "id": "student-08",
+      "passwordHash": "scrypt:e9385537a8da100d27d45b9d63049a2d:6009a254be9a1d2d4af12e21abb55adaccf95c2448bf38e71dbaa07a7ddd8f83"
+    },
+    {
+      "id": "student-09",
+      "passwordHash": "scrypt:096c4db6334d759b2facb6c0f6aa7b00:65f0fe5116f632cfe0d0e8edede6c70fff4ef83d76299bd12453af48935d128b"
+    },
+    {
+      "id": "student-10",
+      "passwordHash": "scrypt:83dc5130268a969aa414b1005c3f51a9:bfd8f2fb524c670ed9377bdd40e3a85984457e54069f10950e6044c2e1d1db55"
+    },
+    {
+      "id": "student-11",
+      "passwordHash": "scrypt:80d8b83284211c46c64243cba55ba3a6:491844964a86605b61c5c28043244ba8ff0ebdf6c10ee2333cd55457df618686"
+    },
+    {
+      "id": "student-12",
+      "passwordHash": "scrypt:6715be235a09048bdb667995674aa4b8:2c0535ad5a92cdae30689e9e718418bc045fe3ba00c7939b5311891bca4ef295"
+    },
+    {
+      "id": "student-13",
+      "passwordHash": "scrypt:e1ac6a287e49723190f96edc1b5ae3f9:8841b8a624e78d7b4a8432c5094eaa34a7c5bbf288d249cdd8cdb2bb97653780"
+    },
+    {
+      "id": "student-14",
+      "passwordHash": "scrypt:a83fcc723c388817ff8be00c0ef13219:4f7aef5f20c37788c03f3798602fe68d71bba0f30a0a983defe25edd77f4324e"
+    },
+    {
+      "id": "student-15",
+      "passwordHash": "scrypt:b28880f5606cac49b60a817b6133bb56:185a6a97a8fcfa19ef3b2efeeb90da2b503e18d0adc126cde0bb591020f0f2a7"
+    },
+    {
+      "id": "student-16",
+      "passwordHash": "scrypt:23cdc6b111547a84e05b956e457bc8de:ecb45120ed80b968809b314e9e1f508d8e3e9d110a87686045b7cf15676c623a"
+    },
+    {
+      "id": "student-17",
+      "passwordHash": "scrypt:d2928de80e62e3dea52271449aff8de4:c51325ec86548f81f80b52729a7031127d80425cd9f75443fec0b53104c13f90"
+    },
+    {
+      "id": "student-18",
+      "passwordHash": "scrypt:8be0b2cf42894c57096f9acdbbb47cbb:eb37ea8562e7eb9094c7043a2f96958479dbe43d35dc555e75143f453ecfe2d7"
+    },
+    {
+      "id": "student-19",
+      "passwordHash": "scrypt:28520d6fc48bd1ecb6516fb4e857e154:5e085bd48184e4dacc91ffb813b66dd539f8303393dee867680294a3a9afaf25"
+    },
+    {
+      "id": "student-20",
+      "passwordHash": "scrypt:4ca89ca7d8aab3efc665c7cdf9ab8499:16e70811e0574b95d3cb18e0444cb8c81b4309cbcb1075ec2600101e5fc6b1e8"
+    },
+    {
+      "id": "student-21",
+      "passwordHash": "scrypt:50e0e30fcd94a6944a8c877f4bad45e1:e2cc726cb2e48a499b4d42d1beba5fd4f1800c3253c4eab649edc4f951e973cb"
+    },
+    {
+      "id": "student-22",
+      "passwordHash": "scrypt:9665536c12f6a6c0326e70bfe9ef6961:0b0aaa333a2ecf2370dbfbf1362bfa0ebaf69165703a714f0658a784d8f94c59"
+    },
+    {
+      "id": "student-23",
+      "passwordHash": "scrypt:e9448721b6d0b9d15194dff21e283211:b5dbe007f8e1e5e71acdea2b0bf84487827830db4277b5e71f593f984c559851"
+    },
+    {
+      "id": "student-24",
+      "passwordHash": "scrypt:d745fe8434f7fd821bd8d6b0948de424:1ea99a3426a824cd6d3c3b1722574c295037cde829424692eface51bfd1cb29f"
+    }
+  ],
+  "signingKey": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIPAFEcdxWo7d6yjP6vvf+SVQGETMauf8nx3HDbbgtZxB\n-----END PRIVATE KEY-----\n",
+  "adminToken": "c072c66bbe29b7a2631d8f40f23945b2549e8636768f8d113f3c0c2b301f21e7"
+}

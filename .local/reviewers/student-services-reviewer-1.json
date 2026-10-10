@@ -1,0 +1,8 @@
+{
+  "id": "student-services-reviewer-1",
+  "name": "Student Services reviewer 1",
+  "departmentId": "student-services",
+  "publicKey": "ffeaea07ddb6c049bdf6d827a5aaa80ec0c972d8fc980f957cbdcc545683513b",
+  "privateKey": "f2a8f420b046eb597a1f4d22a6ff18e2f131be69756847134cdb54d6670ee2a6",
+  "token": "97ef150c86f238902fa21fc0901b09aeaf37f5a3d07377fc241e640e79a63e0a"
+}

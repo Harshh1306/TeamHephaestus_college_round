@@ -1,0 +1,8 @@
+{
+  "id": "ombuds-office-reviewer-1",
+  "name": "Ombuds Office reviewer 1",
+  "departmentId": "ombuds-office",
+  "publicKey": "80ef559403d68ca090f587c6e0bb6b04de4bc6a67d2cf9b99c55892a7476ab61",
+  "privateKey": "0f3e58d504e2fbbe1c38c365ea881f7cd4124164730250d97b2f2e0712ed051d",
+  "token": "216ec9956a16ba14e786f35184a7a70eb9c400cb558d930933321d928c16e8ba"
+}

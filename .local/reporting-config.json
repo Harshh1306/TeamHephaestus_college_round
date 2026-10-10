@@ -1,0 +1,113 @@
+{
+  "authorityPublicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAY3WS/tgPoSfzsH+nlRReZSWoEJ0gn6cpE1wyUw52E9c=\n-----END PUBLIC KEY-----\n",
+  "receiptPrivateKey": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIF2ZmvxGo6162B0AMsEpyMQmyeDX8cMlEkI9WfT4Csky\n-----END PRIVATE KEY-----\n",
+  "receiptPublicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAGYxZ+JO24jAbFEXmeUdiR0tFt+P/JWt0o3lWggXSUlg=\n-----END PUBLIC KEY-----\n",
+  "departments": [
+    {
+      "id": "academic-affairs",
+      "label": "Academic Affairs",
+      "publicKey": "56a7c735cf3854778d5033390cc84926420ab90f55f045a195f664f3499bf968"
+    },
+    {
+      "id": "student-services",
+      "label": "Student Services",
+      "publicKey": "ffeaea07ddb6c049bdf6d827a5aaa80ec0c972d8fc980f957cbdcc545683513b"
+    },
+    {
+      "id": "facilities",
+      "label": "Facilities",
+      "publicKey": "91ecfff3b8689e12bb924fb76d7324735490f70aa2cdada7a661eab7a00b1f25"
+    },
+    {
+      "id": "campus-safety",
+      "label": "Campus Safety",
+      "publicKey": "91f27bc82f8e92a9ca1ed7c794c50ae021d6e783e3f9720124fdd8f062eceb23"
+    },
+    {
+      "id": "ombuds-office",
+      "label": "Ombuds Office",
+      "publicKey": "80ef559403d68ca090f587c6e0bb6b04de4bc6a67d2cf9b99c55892a7476ab61"
+    }
+  ],
+  "reviewers": [
+    {
+      "id": "academic-affairs-reviewer-1",
+      "name": "Academic Affairs reviewer 1",
+      "departmentId": "academic-affairs",
+      "token": "567115e7d91405184853c891d3d036cb7e1ce0b06391742d1e21befcba978bb8"
+    },
+    {
+      "id": "academic-affairs-reviewer-2",
+      "name": "Academic Affairs reviewer 2",
+      "departmentId": "academic-affairs",
+      "token": "df3cbca89303a9abc15081d3ec5f8337ee1bcd3b99e7fffef7e10ddf693100c8"
+    },
+    {
+      "id": "student-services-reviewer-1",
+      "name": "Student Services reviewer 1",
+      "departmentId": "student-services",
+      "token": "97ef150c86f238902fa21fc0901b09aeaf37f5a3d07377fc241e640e79a63e0a"
+    },
+    {
+      "id": "student-services-reviewer-2",
+      "name": "Student Services reviewer 2",
+      "departmentId": "student-services",
+      "token": "0c7c5f2c342b5b60dc3e6e3cd1a3b7a3fac15a1a5d5743aa87fd6d7785269f76"
+    },
+    {
+      "id": "facilities-reviewer-1",
+      "name": "Facilities reviewer 1",
+      "departmentId": "facilities",
+      "token": "55bdb9c604d4dc6cc3e63563907416b6a0715058023f10783b3972b58f41f7a5"
+    },
+    {
+      "id": "facilities-reviewer-2",
+      "name": "Facilities reviewer 2",
+      "departmentId": "facilities",
+      "token": "cd93c447a6681e9ae0e15bc35a86c63ba07b3ee23818c459a5b1cf418d4020af"
+    },
+    {
+      "id": "campus-safety-reviewer-1",
+      "name": "Campus Safety reviewer 1",
+      "departmentId": "campus-safety",
+      "token": "6d115640c50354720dabeb00abdc156d55eb6c92509c87458e86870ca388d84b"
+    },
+    {
+      "id": "campus-safety-reviewer-2",
+      "name": "Campus Safety reviewer 2",
+      "departmentId": "campus-safety",
+      "token": "db731ab1762bb93052abd919fa8814f4baf4a1ef4b79a0f1fca27e1e8d1362d0"
+    },
+    {
+      "id": "ombuds-office-reviewer-1",
+      "name": "Ombuds Office reviewer 1",
+      "departmentId": "ombuds-office",
+      "token": "216ec9956a16ba14e786f35184a7a70eb9c400cb558d930933321d928c16e8ba"
+    },
+    {
+      "id": "ombuds-office-reviewer-2",
+      "name": "Ombuds Office reviewer 2",
+      "departmentId": "ombuds-office",
+      "token": "bae34254fdfb6821b0568bb51f6b2108d31e51b2d00cba2f6a459ce0e0f3e1ae"
+    }
+  ],
+  "topicDepartments": {
+    "faculty-conduct": "academic-affairs",
+    "administration": "student-services",
+    "infrastructure": "facilities",
+    "campus-safety": "campus-safety",
+    "other": "ombuds-office"
+  },
+  "snapshot": {
+    "organizationId": "college-demo",
+    "groupId": "institution-members-v1",
+    "epoch": 1,
+    "root": "19106341018148997238975636570785890021292321356966752979330287390163796531940",
+    "members": [
+      "21340108091736430700551609257900313267283036466974130523736138616750194524330",
+      "13433885455528104087626775694150740913495515865765413627675118565647514185596",
+      "1428264727224914281412840119346792214480533363939787095181395315723253825186"
+    ],
+    "signature": "ePQCj7F3vjzbBh8XFnFBbk0e+rCX5GTBihX2nAUeaiTCBXqRtnPXiWin7u8dUkMHLb0KAlGGfITp3VoKncOSDQ=="
+  }
+}

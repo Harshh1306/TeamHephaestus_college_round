@@ -1,0 +1,8 @@
+{
+  "id": "academic-affairs-reviewer-1",
+  "name": "Academic Affairs reviewer 1",
+  "departmentId": "academic-affairs",
+  "publicKey": "56a7c735cf3854778d5033390cc84926420ab90f55f045a195f664f3499bf968",
+  "privateKey": "b1f16f1a7ddb5b2691c45e56ed5c4f7eba0ff698f4895cd469ae5974b8f0ee17",
+  "token": "567115e7d91405184853c891d3d036cb7e1ce0b06391742d1e21befcba978bb8"
+}
