@@ -1390,6 +1390,10 @@ function Reviewer() {
               )}
               {cases.map((c) => {
                 const isPending = !!c.pendingHandoff;
+                const declinedHandoffs = (c.handoffHistory || []).filter(
+                  (h: any) => h.status === 'declined',
+                );
+                const lastDeclined = declinedHandoffs[declinedHandoffs.length - 1];
                 return (
                   <button
                     className={`case-row ${selected?.id === c.id ? 'selected' : ''} ${isPending ? 'pending-handoff' : ''}`}
@@ -1412,6 +1416,14 @@ function Reviewer() {
                     ) : (
                       <>
                         <span className="status-badge">{c.status}</span>
+                        {lastDeclined && (
+                          <span
+                            className="status-badge declined"
+                            title={`Handoff declined by ${lastDeclined.target}`}
+                          >
+                            declined by {lastDeclined.target}
+                          </span>
+                        )}
                         {c.reopenRequested && (
                           <span className="status-badge">reopen requested</span>
                         )}
@@ -1438,9 +1450,13 @@ function Reviewer() {
                   >
                     <div>
                       <strong>From {handoff.source}</strong>
-                      <small>{TOPIC_LABELS[handoff.topic]}</small>
+                      <small>{TOPIC_LABELS[handoff.topic] || handoff.topic}</small>
                     </div>
-                    <span className="status-badge">{handoff.status}</span>
+                    <span
+                      className={`status-badge ${handoff.status === 'declined' ? 'declined' : ''}`}
+                    >
+                      {handoff.status === 'declined' ? 'rejected' : handoff.status}
+                    </span>
                     <ChevronRight size={15} />
                   </button>
                 ))
@@ -1451,13 +1467,33 @@ function Reviewer() {
                 <>
                   <div className="panel-title">
                     <h3>{content.title}</h3>
-                    <span className="status-badge">{selectedHandoff.status}</span>
+                    <span
+                      className={`status-badge ${selectedHandoff.status === 'declined' ? 'declined' : ''}`}
+                    >
+                      {selectedHandoff.status === 'declined' ? 'rejected' : selectedHandoff.status}
+                    </span>
                   </div>
                   <p className="report-text">{content.details}</p>
-                  <Notice>
-                    This is an encrypted, minimum-necessary handoff summary. The original
-                    report remains with the source department.
-                  </Notice>
+                  {selectedHandoff.status === 'declined' ? (
+                    <div className="warning" style={{ margin: '8px 0' }}>
+                      <AlertTriangle size={18} />
+                      <div>
+                        <strong>Handoff rejected by your department.</strong>
+                        <p style={{ margin: 0 }}>
+                          Your department declined custody of this case
+                          {selectedHandoff.decidedAt
+                            ? ` on ${new Date(selectedHandoff.decidedAt).toLocaleDateString()}`
+                            : ''}
+                          . Custody remained with {selectedHandoff.source}.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <Notice>
+                      This is an encrypted, minimum-necessary handoff summary. The original
+                      report remains with the source department.
+                    </Notice>
+                  )}
                   {selectedHandoff.status === 'approved' && (
                     <div className="toolbar">
                       <button
@@ -1549,8 +1585,33 @@ function Reviewer() {
                               )
                             </span>
                           )}
+                          {selected.handoffHistory?.filter((h: any) => h.status === 'declined').length > 0 && (
+                            <span style={{ color: '#fca5a5' }}>
+                              (Declined by:{' '}
+                              {selected.handoffHistory
+                                .filter((h: any) => h.status === 'declined')
+                                .map((h: any) => h.target)
+                                .join(', ')}
+                              )
+                            </span>
+                          )}
                         </div>
                       </div>
+                      {selected.handoffHistory?.filter((h: any) => h.status === 'declined').length > 0 && (
+                        <div className="warning" style={{ margin: '8px 0' }}>
+                          <AlertTriangle size={16} />
+                          <div>
+                            <strong>Handoff rejected</strong>
+                            <p style={{ margin: 0 }}>
+                              {selected.handoffHistory
+                                .filter((h: any) => h.status === 'declined')
+                                .map((h: any) => h.target)
+                                .join(', ')}{' '}
+                              declined custody of this case. You retain ownership. Re-forwarding to previously declined departments is disabled.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       <Notice>
                         Member eligibility is verified. Reported allegations require independent
                         investigation.
@@ -1563,77 +1624,104 @@ function Reviewer() {
                             further.
                           </p>
                         </Notice>
-                      ) : (
-                        <section className="handoff-composer">
-                          <h4>Forward to another department</h4>
-                          <p className="caption">
-                            Share an encrypted, minimum-necessary summary directly with another department.
-                            The original report stays in this department until accepted.
-                          </p>
-                          <label>
-                            Destination department
-                            <select
-                              value={handoffTarget}
-                              onChange={(event) => setHandoffTarget(event.target.value)}
+                      ) : (() => {
+                        const declinedDeptIds = new Set(
+                          (selected.handoffHistory || [])
+                            .filter((h: any) => h.status === 'declined')
+                            .map((h: any) => h.targetDepartment || h.target),
+                        );
+                        const availableDepts = Object.entries(DEPARTMENT_LABELS).filter(
+                          ([id]) => id !== selected.department,
+                        );
+                        const allAvailableDeclined =
+                          availableDepts.length > 0 &&
+                          availableDepts.every(([id]) => declinedDeptIds.has(id));
+
+                        if (allAvailableDeclined) {
+                          return (
+                            <Notice>
+                              <strong>All other departments have declined this case.</strong>
+                              <p>
+                                Every available department has previously declined custody of this
+                                report. It must be investigated or resolved within your department.
+                              </p>
+                            </Notice>
+                          );
+                        }
+
+                        return (
+                          <section className="handoff-composer">
+                            <h4>Forward to another department</h4>
+                            <p className="caption">
+                              Share an encrypted, minimum-necessary summary directly with another department.
+                              The original report stays in this department until accepted.
+                            </p>
+                            <label>
+                              Destination department
+                              <select
+                                value={handoffTarget}
+                                onChange={(event) => setHandoffTarget(event.target.value)}
+                              >
+                                <option value="">Choose a department</option>
+                                {availableDepts.map(([id, label]) => {
+                                  const isDeclined = declinedDeptIds.has(id);
+                                  return (
+                                    <option key={id} value={id} disabled={isDeclined}>
+                                      {label} {isDeclined ? ' (declined — cannot re-forward)' : ''}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </label>
+                            <label>
+                              Encrypted handoff summary
+                              <textarea
+                                rows={3}
+                                maxLength={5000}
+                                value={handoffSummary}
+                                onChange={(event) => setHandoffSummary(event.target.value)}
+                                placeholder="Share only what the other department needs to act."
+                              />
+                            </label>
+                            <button
+                              className="secondary small"
+                              disabled={!handoffTarget || !handoffSummary.trim() || declinedDeptIds.has(handoffTarget)}
+                              onClick={async () => {
+                                try {
+                                  const policy = await getPolicy();
+                                  const destination = policy.departments.find(
+                                    (department) => department.id === handoffTarget,
+                                  );
+                                  if (!destination) throw new Error('That department is unavailable.');
+                                  const summary = handoffSummary.trim();
+                                  await api(
+                                    `/v1/reviewer/cases/${selected.id}/handoffs`,
+                                    'POST',
+                                    {
+                                      targetDepartment: destination.id,
+                                      summaryCiphertext: await seal(
+                                        JSON.stringify({
+                                          title: content?.title || `Case ${selected.id.slice(0, 8)}`,
+                                          details: summary,
+                                        }),
+                                        destination.publicKey,
+                                      ),
+                                    },
+                                    credentials.token,
+                                  );
+                                  setHandoffSummary('');
+                                  setHandoffTarget('');
+                                  await open(selected);
+                                } catch (e) {
+                                  setError(friendly(e));
+                                }
+                              }}
                             >
-                              <option value="">Choose a department</option>
-                              {Object.entries(DEPARTMENT_LABELS)
-                                .filter(([id]) => id !== selected.department)
-                                .map(([id, label]) => (
-                                  <option key={id} value={id}>
-                                    {label}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          <label>
-                            Encrypted handoff summary
-                            <textarea
-                              rows={3}
-                              maxLength={5000}
-                              value={handoffSummary}
-                              onChange={(event) => setHandoffSummary(event.target.value)}
-                              placeholder="Share only what the other department needs to act."
-                            />
-                          </label>
-                          <button
-                            className="secondary small"
-                            disabled={!handoffTarget || !handoffSummary.trim()}
-                            onClick={async () => {
-                              try {
-                                const policy = await getPolicy();
-                                const destination = policy.departments.find(
-                                  (department) => department.id === handoffTarget,
-                                );
-                                if (!destination) throw new Error('That department is unavailable.');
-                                const summary = handoffSummary.trim();
-                                await api(
-                                  `/v1/reviewer/cases/${selected.id}/handoffs`,
-                                  'POST',
-                                  {
-                                    targetDepartment: destination.id,
-                                    summaryCiphertext: await seal(
-                                      JSON.stringify({
-                                        title: content?.title || `Case ${selected.id.slice(0, 8)}`,
-                                        details: summary,
-                                      }),
-                                      destination.publicKey,
-                                    ),
-                                  },
-                                  credentials.token,
-                                );
-                                setHandoffSummary('');
-                                setHandoffTarget('');
-                                await open(selected);
-                              } catch (e) {
-                                setError(friendly(e));
-                              }
-                            }}
-                          >
-                            Forward to department <ArrowRight size={16} />
-                          </button>
-                        </section>
-                      )}
+                              Forward to department <ArrowRight size={16} />
+                            </button>
+                          </section>
+                        );
+                      })()}
                   {selected.reopenRequested && (
                     <Notice>
                       <strong>Reporter requested a reopen.</strong>

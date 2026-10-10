@@ -274,10 +274,13 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
     const history: HandoffHistoryItem[] = handoffs.map((h) => ({
       id: h.id,
       source: departmentLabel(config, h.source_department as any),
+      sourceDepartment: h.source_department,
       target: departmentLabel(config, h.target_department as any),
+      targetDepartment: h.target_department,
       status: h.status,
       createdAt: h.created_at,
       acceptedAt: h.accepted_at,
+      decidedAt: h.decided_at,
     }));
     return {
       id: row.id,
@@ -501,6 +504,11 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       if (!locked) throw new ApiError('ACCESS_DENIED', 403);
       reviewer(req, locked);
       if ((locked.handoff_count ?? 0) >= MAX_HANDOFFS) throw new ApiError('MAX_HANDOFFS_EXCEEDED', 409);
+      const previouslyDeclined = await tx.query<{ id: string }>(
+        "SELECT id FROM case_handoffs WHERE case_id=$1 AND target_department=$2 AND status='declined'",
+        [id, target.id],
+      );
+      if (previouslyDeclined.length) throw new ApiError('HANDOFF_PREVIOUSLY_DECLINED', 409);
       const existing = await tx.query<{ id: string }>(
         "SELECT id FROM case_handoffs WHERE case_id=$1 AND status='approved'",
         [id],
@@ -530,7 +538,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
   app.get('/v1/reviewer/handoffs', async (req) => {
     const actor = reviewer(req);
     const rows = await db.query<Handoff>(
-      "SELECT h.*,r.topic,r.status AS case_status FROM case_handoffs h JOIN reports r ON r.id=h.case_id WHERE h.target_department=$1 AND h.status IN ('approved','accepted') ORDER BY h.created_at DESC",
+      "SELECT h.*,r.topic,r.status AS case_status FROM case_handoffs h JOIN reports r ON r.id=h.case_id WHERE h.target_department=$1 AND h.status IN ('approved','accepted','declined') ORDER BY h.created_at DESC",
       [actor.departmentId],
     );
     return rows.map((handoff) => ({
@@ -539,9 +547,13 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       topic: handoff.topic,
       caseStatus: handoff.case_status,
       source: departmentLabel(config, handoff.source_department as any),
+      sourceDepartment: handoff.source_department,
       target: departmentLabel(config, handoff.target_department as any),
+      targetDepartment: handoff.target_department,
       status: handoff.status,
       createdAt: handoff.created_at,
+      decidedAt: handoff.decided_at,
+      acceptedAt: handoff.accepted_at,
       summaryCiphertext: handoff.summary_ciphertext,
     }));
   });

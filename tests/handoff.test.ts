@@ -247,44 +247,65 @@ describe('interdepartmental handoffs', () => {
       });
       expect(declineRes.statusCode).toBe(200);
 
-      // Case reverts back to active in Student Services (pending lock cleared)
+      // Campus Safety (Dpt2) sees the declined handoff in their incoming handoffs list
+      const safetyHandoffs = await app.inject({ url: '/v1/reviewer/handoffs', headers: safetyHeaders });
+      expect(safetyHandoffs.statusCode).toBe(200);
+      const declinedHandoffItem = safetyHandoffs.json().find((h: any) => h.id === handoff2Id);
+      expect(declinedHandoffItem).toBeDefined();
+      expect(declinedHandoffItem.status).toBe('declined');
+
+      // Case reverts back to active in Student Services (Dpt1), pending lock cleared
       const srvReverted = await app.inject({ url: '/v1/reviewer/cases', headers: servicesHeaders });
       expect(srvReverted.json()[0].pendingHandoff).toBeNull();
+      // Student Services (Dpt1) sees that the case handoff was declined in history
+      const declinedInHistory = srvReverted.json()[0].handoffHistory.find((h: any) => h.status === 'declined');
+      expect(declinedInHistory).toBeDefined();
+      expect(declinedInHistory.targetDepartment).toBe('campus-safety');
 
-      // 7. Test Hand-off to Campus Safety accepted (Handoff count -> 2)
-      const handoff3 = await app.inject({
+      // Attempting to forward to Campus Safety AGAIN must fail (HANDOFF_PREVIOUSLY_DECLINED 409)
+      const retryDeclined = await app.inject({
         method: 'POST',
         url: `/v1/reviewer/cases/${caseId}/handoffs`,
         headers: servicesHeaders,
         payload: { targetDepartment: 'campus-safety', summaryCiphertext: ciphertext },
       });
+      expect(retryDeclined.statusCode).toBe(409);
+      expect(retryDeclined.json().code).toBe('HANDOFF_PREVIOUSLY_DECLINED');
+
+      // 7. Student Services forwards to Facilities instead (Handoff count -> 2)
+      const handoff3 = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/handoffs`,
+        headers: servicesHeaders,
+        payload: { targetDepartment: 'facilities', summaryCiphertext: ciphertext },
+      });
       expect(handoff3.statusCode).toBe(201);
       await app.inject({
         method: 'POST',
         url: `/v1/reviewer/handoffs/${handoff3.json().id}/accept`,
-        headers: safetyHeaders,
+        headers: facilitiesHeaders,
       });
 
-      // 8. Campus Safety forwards back to Facilities (Handoff count -> 3 = MAX)
+      // 8. Facilities forwards back to Student Services (Handoff count -> 3 = MAX)
       const handoff4 = await app.inject({
         method: 'POST',
         url: `/v1/reviewer/cases/${caseId}/handoffs`,
-        headers: safetyHeaders,
-        payload: { targetDepartment: 'facilities', summaryCiphertext: ciphertext },
+        headers: facilitiesHeaders,
+        payload: { targetDepartment: 'student-services', summaryCiphertext: ciphertext },
       });
       expect(handoff4.statusCode).toBe(201);
       await app.inject({
         method: 'POST',
         url: `/v1/reviewer/handoffs/${handoff4.json().id}/accept`,
-        headers: facilitiesHeaders,
+        headers: servicesHeaders,
       });
 
       // 9. Now handoff_count = 3. Attempting another handoff should be rejected (MAX_HANDOFFS_EXCEEDED 409)
       const handoffLimit = await app.inject({
         method: 'POST',
         url: `/v1/reviewer/cases/${caseId}/handoffs`,
-        headers: facilitiesHeaders,
-        payload: { targetDepartment: 'student-services', summaryCiphertext: ciphertext },
+        headers: servicesHeaders,
+        payload: { targetDepartment: 'facilities', summaryCiphertext: ciphertext },
       });
       expect(handoffLimit.statusCode).toBe(409);
       expect(handoffLimit.json().code).toBe('MAX_HANDOFFS_EXCEEDED');

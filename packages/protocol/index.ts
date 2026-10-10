@@ -45,10 +45,13 @@ export const MAX_HANDOFFS = 3;
 export interface HandoffHistoryItem {
   id: string;
   source: string;
+  sourceDepartment?: string;
   target: string;
+  targetDepartment?: string;
   status: string;
   createdAt: string;
   acceptedAt?: string | null;
+  decidedAt?: string | null;
 }
 
 export interface PendingHandoffSummary {

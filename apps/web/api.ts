@@ -116,6 +116,10 @@ export const friendly = (error: unknown) => {
     HANDOFF_ALREADY_ACTIVE: 'A handoff to this department is already active for this case.',
     HANDOFF_ALREADY_DECIDED: 'This handoff already has a recorded decision.',
     HANDOFF_NOT_APPROVED: 'The reporter must approve this handoff before it can be accepted.',
+    HANDOFF_PREVIOUSLY_DECLINED:
+      'This department previously declined this case and cannot be chosen again.',
+    MAX_HANDOFFS_EXCEEDED: 'The maximum number of handoffs for this case has been reached.',
+    HANDOFF_PENDING: 'A handoff is currently pending acceptance for this case.',
   };
   return messages[raw] || raw;
 };
