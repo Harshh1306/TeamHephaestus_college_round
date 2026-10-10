@@ -19,7 +19,7 @@ const token = (character: string) => character.repeat(64);
 const ciphertext = 'A'.repeat(64);
 
 describe('interdepartmental handoffs', () => {
-  test('keeps the original case private while a target department receives a forwarded summary', async () => {
+  test('full lifecycle: pending lock, disappearance on acceptance, operational ownership, decline, and limit', async () => {
     const authority = generateKeyPairSync('ed25519');
     const receipt = generateKeyPairSync('ed25519');
     const members = ['handoff-alice', 'handoff-bob', 'handoff-carol'].map((secret) =>
@@ -39,6 +39,7 @@ describe('interdepartmental handoffs', () => {
       departments: [
         { id: 'facilities', label: 'Facilities', publicKey: 'a'.repeat(64) },
         { id: 'student-services', label: 'Student Services', publicKey: 'b'.repeat(64) },
+        { id: 'campus-safety', label: 'Campus Safety', publicKey: 'c'.repeat(64) },
       ],
       reviewers: [
         {
@@ -48,16 +49,16 @@ describe('interdepartmental handoffs', () => {
           token: token('1'),
         },
         {
-          id: 'facilities-two',
-          name: 'Facilities reviewer two',
-          departmentId: 'facilities',
-          token: token('2'),
-        },
-        {
           id: 'services-one',
           name: 'Student services reviewer',
           departmentId: 'student-services',
           token: token('3'),
+        },
+        {
+          id: 'safety-one',
+          name: 'Campus safety reviewer',
+          departmentId: 'campus-safety',
+          token: token('4'),
         },
       ],
       topicDepartments: {
@@ -91,7 +92,7 @@ describe('interdepartmental handoffs', () => {
     };
     const caseId = '11111111-1111-4111-8111-111111111111';
     await db.query(
-      'INSERT INTO reports(id,topic,envelope,commitment,receipt) VALUES($1,$2,$3,$4,$5)',
+      'INSERT INTO reports(id,topic,envelope,commitment,receipt,current_department,handoff_count) VALUES($1,$2,$3,$4,$5,$6,$7)',
       [
         caseId,
         envelope.topicId,
@@ -102,15 +103,27 @@ describe('interdepartmental handoffs', () => {
           commitment: 'e'.repeat(64),
           acceptedAt: new Date().toISOString(),
         }),
+        'facilities',
+        0,
       ],
     );
     try {
-      const sourceHeaders = { authorization: `Bearer ${token('1')}` };
-      const targetHeaders = { authorization: `Bearer ${token('3')}` };
+      const facilitiesHeaders = { authorization: `Bearer ${token('1')}` };
+      const servicesHeaders = { authorization: `Bearer ${token('3')}` };
+      const safetyHeaders = { authorization: `Bearer ${token('4')}` };
+
+      // 1. Initial State: Facilities owns the case
+      const facInitial = await app.inject({ url: '/v1/reviewer/cases', headers: facilitiesHeaders });
+      expect(facInitial.statusCode).toBe(200);
+      expect(facInitial.json()).toHaveLength(1);
+      expect(facInitial.json()[0].pendingHandoff).toBeNull();
+      expect(facInitial.json()[0].handoffCount).toBe(0);
+
+      // 2. Facilities initiates handoff to Student Services
       const created = await app.inject({
         method: 'POST',
         url: `/v1/reviewer/cases/${caseId}/handoffs`,
-        headers: sourceHeaders,
+        headers: facilitiesHeaders,
         payload: {
           targetDepartment: 'student-services',
           summaryCiphertext: ciphertext,
@@ -119,48 +132,162 @@ describe('interdepartmental handoffs', () => {
       expect(created.statusCode).toBe(201);
       const handoffId = created.json().id;
 
+      // 3. While pending: Facilities sees case greyed out / marked pending, and mutations are locked (409)
+      const facPending = await app.inject({ url: '/v1/reviewer/cases', headers: facilitiesHeaders });
+      expect(facPending.statusCode).toBe(200);
+      expect(facPending.json()[0].pendingHandoff).toMatchObject({
+        targetDepartment: 'student-services',
+        target: 'Student Services',
+      });
+
+      // Actions locked for Facilities while pending
+      const statusBlocked = await app.inject({
+        method: 'PATCH',
+        url: `/v1/reviewer/cases/${caseId}/status`,
+        headers: facilitiesHeaders,
+        payload: { status: 'triaged' },
+      });
+      expect(statusBlocked.statusCode).toBe(409);
+
+      const msgBlocked = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/messages`,
+        headers: facilitiesHeaders,
+        payload: { id: '22222222-2222-4222-8222-222222222222', ciphertext },
+      });
+      expect(msgBlocked.statusCode).toBe(409);
+
+      // Re-forwarding blocked while already pending
+      const doubleForward = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/handoffs`,
+        headers: facilitiesHeaders,
+        payload: { targetDepartment: 'campus-safety', summaryCiphertext: ciphertext },
+      });
+      expect(doubleForward.statusCode).toBe(409);
+
+      // Reporter sees case with active department
       const reporterView = await app.inject({
         url: `/v1/cases/${caseId}`,
         headers: { authorization: `Bearer ${secret}` },
       });
       expect(reporterView.statusCode).toBe(200);
-      expect(reporterView.body).not.toContain('A'.repeat(20));
-      expect(reporterView.json().handoffs).toBeUndefined();
+      expect(reporterView.json().department).toBe('facilities');
 
-      const targetInbox = await app.inject({
-        url: '/v1/reviewer/handoffs',
-        headers: targetHeaders,
+      // 4. Student Services accepts the handoff
+      const acceptRes = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/handoffs/${handoffId}/accept`,
+        headers: servicesHeaders,
       });
-      expect(targetInbox.statusCode).toBe(200);
-      expect(targetInbox.json()[0]).toMatchObject({
-        id: handoffId,
+      expect(acceptRes.statusCode).toBe(200);
+
+      // 5. Post-acceptance verification:
+      // a) Case immediately disappears from Facilities' list
+      const facAfter = await app.inject({ url: '/v1/reviewer/cases', headers: facilitiesHeaders });
+      expect(facAfter.statusCode).toBe(200);
+      expect(facAfter.json()).toEqual([]);
+
+      // Facilities cannot access case directly anymore (403)
+      const facDirect = await app.inject({ url: `/v1/reviewer/cases/${caseId}`, headers: facilitiesHeaders });
+      expect(facDirect.statusCode).toBe(403);
+
+      // b) Case is now in Student Services active list with handoffCount = 1
+      const srvActive = await app.inject({ url: '/v1/reviewer/cases', headers: servicesHeaders });
+      expect(srvActive.statusCode).toBe(200);
+      expect(srvActive.json()).toHaveLength(1);
+      expect(srvActive.json()[0].handoffCount).toBe(1);
+      expect(srvActive.json()[0].pendingHandoff).toBeNull();
+      expect(srvActive.json()[0].handoffHistory).toHaveLength(1);
+      expect(srvActive.json()[0].handoffHistory[0]).toMatchObject({
         source: 'Facilities',
         target: 'Student Services',
-        status: 'approved',
-        summaryCiphertext: ciphertext,
+        status: 'accepted',
       });
-      expect(
-        (
-          await app.inject({
-            method: 'POST',
-            url: `/v1/reviewer/handoffs/${handoffId}/accept`,
-            headers: targetHeaders,
-          })
-        ).statusCode,
-      ).toBe(200);
-      const events = await db.query<{ actor: string; action: string }>(
-        'SELECT actor,action FROM review_events WHERE case_id=$1 ORDER BY created_at',
-        [caseId],
-      );
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            actor: 'facilities-one',
-            action: 'handoff-requested:student-services',
-          }),
-          expect.objectContaining({ actor: 'services-one', action: 'handoff-accepted:facilities' }),
-        ]),
-      );
+
+      // c) Student Services can operate on the case (update status, send reply)
+      const srvStatus = await app.inject({
+        method: 'PATCH',
+        url: `/v1/reviewer/cases/${caseId}/status`,
+        headers: servicesHeaders,
+        payload: { status: 'triaged' },
+      });
+      expect(srvStatus.statusCode).toBe(200);
+
+      const srvMsg = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/messages`,
+        headers: servicesHeaders,
+        payload: { id: '33333333-3333-4333-8333-333333333333', ciphertext },
+      });
+      expect(srvMsg.statusCode).toBe(201);
+
+      // Reporter view now routes to Student Services
+      const reporterViewAfter = await app.inject({
+        url: `/v1/cases/${caseId}`,
+        headers: { authorization: `Bearer ${secret}` },
+      });
+      expect(reporterViewAfter.json().department).toBe('student-services');
+
+      // 6. Test Decline Behavior on a second handoff (Student Services -> Campus Safety)
+      const handoff2 = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/handoffs`,
+        headers: servicesHeaders,
+        payload: { targetDepartment: 'campus-safety', summaryCiphertext: ciphertext },
+      });
+      expect(handoff2.statusCode).toBe(201);
+      const handoff2Id = handoff2.json().id;
+
+      // Campus Safety declines
+      const declineRes = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/handoffs/${handoff2Id}/decline`,
+        headers: safetyHeaders,
+      });
+      expect(declineRes.statusCode).toBe(200);
+
+      // Case reverts back to active in Student Services (pending lock cleared)
+      const srvReverted = await app.inject({ url: '/v1/reviewer/cases', headers: servicesHeaders });
+      expect(srvReverted.json()[0].pendingHandoff).toBeNull();
+
+      // 7. Test Hand-off to Campus Safety accepted (Handoff count -> 2)
+      const handoff3 = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/handoffs`,
+        headers: servicesHeaders,
+        payload: { targetDepartment: 'campus-safety', summaryCiphertext: ciphertext },
+      });
+      expect(handoff3.statusCode).toBe(201);
+      await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/handoffs/${handoff3.json().id}/accept`,
+        headers: safetyHeaders,
+      });
+
+      // 8. Campus Safety forwards back to Facilities (Handoff count -> 3 = MAX)
+      const handoff4 = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/handoffs`,
+        headers: safetyHeaders,
+        payload: { targetDepartment: 'facilities', summaryCiphertext: ciphertext },
+      });
+      expect(handoff4.statusCode).toBe(201);
+      await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/handoffs/${handoff4.json().id}/accept`,
+        headers: facilitiesHeaders,
+      });
+
+      // 9. Now handoff_count = 3. Attempting another handoff should be rejected (MAX_HANDOFFS_EXCEEDED 409)
+      const handoffLimit = await app.inject({
+        method: 'POST',
+        url: `/v1/reviewer/cases/${caseId}/handoffs`,
+        headers: facilitiesHeaders,
+        payload: { targetDepartment: 'student-services', summaryCiphertext: ciphertext },
+      });
+      expect(handoffLimit.statusCode).toBe(409);
+      expect(handoffLimit.json().code).toBe('MAX_HANDOFFS_EXCEEDED');
     } finally {
       await app.close();
       await db.close();

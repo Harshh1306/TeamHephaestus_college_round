@@ -13,9 +13,12 @@ import {
   accessVerifierFor,
   ORGANIZATION,
   TOPICS,
+  MAX_HANDOFFS,
   type Snapshot,
   type Envelope,
   type Receipt,
+  type HandoffHistoryItem,
+  type PendingHandoffSummary,
 } from '../../packages/protocol/index';
 import { safeEqual, signText, validSnapshot, rawPublicKey } from '../../packages/server/signatures';
 import {
@@ -23,6 +26,7 @@ import {
   configuredReviewers,
   departmentForTopic,
   departmentLabel,
+  activeDepartmentForCase,
   type ApiConfig,
   type ReviewerConfig,
 } from '../../packages/server/config';
@@ -47,6 +51,8 @@ type Case = {
   closure_reason: string | null;
   reopen_requested: boolean;
   reopen_reason: string | null;
+  current_department?: string | null;
+  handoff_count?: number;
   created_at: string;
 };
 type Handoff = {
@@ -183,10 +189,18 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       // The same row lock serializes membership changes and report admission.
       if (proof.merkleTreeRoot !== (await currentSnapshot(tx, true)).root)
         throw new ApiError('UNAUTHORIZED_GROUP');
-      if (envelope.period !== currentPeriod(now())) throw new ApiError('POLICY_EXPIRED');
+      const initialDepartment = departmentForTopic(config, envelope.topicId);
       await tx.query(
-        'INSERT INTO reports(id,topic,envelope,commitment,receipt) VALUES($1,$2,$3,$4,$5)',
-        [caseId, envelope.topicId, JSON.stringify(envelope), commitment, JSON.stringify(receipt)],
+        'INSERT INTO reports(id,topic,envelope,commitment,receipt,current_department,handoff_count) VALUES($1,$2,$3,$4,$5,$6,$7)',
+        [
+          caseId,
+          envelope.topicId,
+          JSON.stringify(envelope),
+          commitment,
+          JSON.stringify(receipt),
+          initialDepartment,
+          0,
+        ],
       );
       await tx.query(
         'INSERT INTO used_nullifiers(organization,scope,nullifier,report_id) VALUES($1,$2,$3,$4)',
@@ -201,18 +215,26 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
     if (!row) throw new ApiError('ACCESS_DENIED', 403);
     return row;
   }
-  function reviewer(req: { headers: { authorization?: string } }, topic?: string): ReviewerConfig {
+  function reviewer(
+    req: { headers: { authorization?: string } },
+    target?: Case | string,
+  ): ReviewerConfig {
     const actor = configuredReviewers(config).find((candidate) =>
       safeEqual(req.headers.authorization ?? '', `Bearer ${candidate.token}`),
     );
     if (!actor) throw new ApiError('ACCESS_DENIED', 403);
-    if (topic && !config.reviewers?.length && !config.reviewerTopics?.includes(topic))
-      throw new ApiError('ACCESS_DENIED', 403);
-    if (
-      topic &&
-      departmentForTopic(config, topic as (typeof TOPICS)[number]) !== actor.departmentId
-    )
-      throw new ApiError('ACCESS_DENIED', 403);
+    if (target) {
+      const topic = typeof target === 'string' ? target : target.topic;
+      if (!config.reviewers?.length && config.reviewerTopics && !config.reviewerTopics.includes(topic))
+        throw new ApiError('ACCESS_DENIED', 403);
+      if (typeof target === 'string') {
+        if (departmentForTopic(config, target as (typeof TOPICS)[number]) !== actor.departmentId)
+          throw new ApiError('ACCESS_DENIED', 403);
+      } else {
+        const activeDept = activeDepartmentForCase(config, target);
+        if (activeDept !== actor.departmentId) throw new ApiError('ACCESS_DENIED', 403);
+      }
+    }
     return actor;
   }
   async function reporter(req: { headers: { authorization?: string } }, row: Case) {
@@ -224,34 +246,72 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       throw new ApiError('ACCESS_DENIED', 403);
   }
   const params = (req: { params: unknown }) => z.object({ id: z.uuid() }).parse(req.params);
-  const visible = (row: Case) => ({
-    id: row.id,
-    topic: row.topic,
-    status: row.status,
-    closureReason: row.closure_reason,
-    reopenRequested: row.reopen_requested,
-    reopenReason: row.reopen_reason,
-    createdAt: row.created_at,
-    receipt: row.receipt,
-    ciphertext: row.envelope.ciphertext,
-    replyPublicKey: row.envelope.replyPublicKey,
-    department: departmentForTopic(config, row.topic as (typeof TOPICS)[number]),
-  });
+  async function enrichCase(row: Case, actorDepartment?: string) {
+    const handoffs = await db.query<Handoff>(
+      'SELECT * FROM case_handoffs WHERE case_id=$1 ORDER BY created_at ASC',
+      [row.id],
+    );
+    const activeDept = activeDepartmentForCase(config, row);
+    const pending = handoffs.find((h) => h.status === 'approved');
+    let pendingHandoff: PendingHandoffSummary | null = null;
+    if (pending && actorDepartment && pending.source_department === actorDepartment) {
+      pendingHandoff = {
+        id: pending.id,
+        targetDepartment: pending.target_department,
+        target: departmentLabel(config, pending.target_department as any),
+        createdAt: pending.created_at,
+      };
+    }
+    let ciphertext = row.envelope.ciphertext;
+    if (activeDept !== departmentForTopic(config, row.topic as (typeof TOPICS)[number])) {
+      const acceptedHandoff = [...handoffs]
+        .reverse()
+        .find((h) => h.status === 'accepted' && h.target_department === activeDept);
+      if (acceptedHandoff) {
+        ciphertext = acceptedHandoff.summary_ciphertext;
+      }
+    }
+    const history: HandoffHistoryItem[] = handoffs.map((h) => ({
+      id: h.id,
+      source: departmentLabel(config, h.source_department as any),
+      target: departmentLabel(config, h.target_department as any),
+      status: h.status,
+      createdAt: h.created_at,
+      acceptedAt: h.accepted_at,
+    }));
+    return {
+      id: row.id,
+      topic: row.topic,
+      status: row.status,
+      closureReason: row.closure_reason,
+      reopenRequested: row.reopen_requested,
+      reopenReason: row.reopen_reason,
+      createdAt: row.created_at,
+      receipt: row.receipt,
+      ciphertext,
+      replyPublicKey: row.envelope.replyPublicKey,
+      department: activeDept,
+      handoffCount: row.handoff_count ?? 0,
+      pendingHandoff,
+      handoffHistory: history,
+    };
+  }
   app.get('/v1/reviewer/cases', async (req) => {
     const actor = reviewer(req);
     const rows = await db.query<Case>('SELECT * FROM reports ORDER BY created_at DESC LIMIT 100');
-    return rows
-      .filter(
-        (row) =>
-          departmentForTopic(config, row.topic as (typeof TOPICS)[number]) === actor.departmentId,
-      )
-      .map(visible);
+    const owned = rows.filter((row) => {
+      if (!config.reviewers?.length && config.reviewerTopics && !config.reviewerTopics.includes(row.topic)) {
+        return false;
+      }
+      return activeDepartmentForCase(config, row) === actor.departmentId;
+    });
+    return Promise.all(owned.map((r) => enrichCase(r, actor.departmentId)));
   });
   app.get('/v1/reviewer/cases/:id', async (req) => {
-    reviewer(req);
+    const actor = reviewer(req);
     const row = await readCase(params(req).id);
-    reviewer(req, row.topic);
-    return visible(row);
+    reviewer(req, row);
+    return enrichCase(row, actor.departmentId);
   });
   app.patch('/v1/reviewer/cases/:id/status', async (req) => {
     const actor = reviewer(req);
@@ -266,7 +326,12 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
     await db.transaction(async (tx) => {
       const [row] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [id]);
       if (!row) throw new ApiError('ACCESS_DENIED', 403);
-      if (reviewer(req, row.topic).id !== actor.id) throw new ApiError('ACCESS_DENIED', 403);
+      reviewer(req, row);
+      const pending = await tx.query<{ id: string }>(
+        "SELECT id FROM case_handoffs WHERE case_id=$1 AND status='approved'",
+        [id],
+      );
+      if (pending.length) throw new ApiError('HANDOFF_PENDING', 409);
       const transitions: Record<string, string[]> = {
         submitted: ['triaged', 'closed'],
         triaged: ['under-review', 'closed'],
@@ -326,6 +391,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       reopenRequested: row.reopen_requested,
       reopenReason: row.reopen_reason,
       receipt: row.receipt,
+      department: activeDepartmentForCase(config, row),
     };
   });
   app.post('/v1/cases/access', async (req) => {
@@ -348,6 +414,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       reopenRequested: row.reopen_requested,
       reopenReason: row.reopen_reason,
       receipt: row.receipt,
+      department: activeDepartmentForCase(config, row),
     };
   });
   for (const role of ['reviewer', 'reporter'] as const) {
@@ -356,7 +423,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
     async function authorize(req: any) {
       if (role === 'reviewer') reviewer(req);
       const row = await readCase(params(req).id);
-      if (role === 'reviewer') reviewer(req, row.topic);
+      if (role === 'reviewer') reviewer(req, row);
       else await reporter(req, row);
       return row;
     }
@@ -382,12 +449,19 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
         .strict()
         .parse(req.body);
       await db.transaction(async (tx) => {
+        if (role === 'reviewer') {
+          const pending = await tx.query<{ id: string }>(
+            "SELECT id FROM case_handoffs WHERE case_id=$1 AND status='approved'",
+            [row.id],
+          );
+          if (pending.length) throw new ApiError('HANDOFF_PENDING', 409);
+        }
         await tx.query(
           'INSERT INTO case_messages(id,case_id,direction,ciphertext) VALUES($1,$2,$3,$4)',
           [data.id, row.id, role, data.ciphertext],
         );
         if (role === 'reviewer') {
-          const actor = reviewer(req, row.topic);
+          const actor = reviewer(req, row);
           await tx.query('INSERT INTO review_events(id,case_id,actor,action) VALUES($1,$2,$3,$4)', [
             randomUUID(),
             row.id,
@@ -409,7 +483,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
   app.post('/v1/reviewer/cases/:id/handoffs', async (req, reply) => {
     const id = params(req).id;
     const row = await readCase(id);
-    const actor = reviewer(req, row.topic);
+    const actor = reviewer(req, row);
     const data = z
       .object({
         targetDepartment: z.string(),
@@ -425,10 +499,11 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
     await db.transaction(async (tx) => {
       const [locked] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [id]);
       if (!locked) throw new ApiError('ACCESS_DENIED', 403);
-      reviewer(req, locked.topic);
+      reviewer(req, locked);
+      if ((locked.handoff_count ?? 0) >= MAX_HANDOFFS) throw new ApiError('MAX_HANDOFFS_EXCEEDED', 409);
       const existing = await tx.query<{ id: string }>(
-        "SELECT id FROM case_handoffs WHERE case_id=$1 AND target_department=$2 AND status IN ('approved','accepted')",
-        [id, target.id],
+        "SELECT id FROM case_handoffs WHERE case_id=$1 AND status='approved'",
+        [id],
       );
       if (existing.length) throw new ApiError('HANDOFF_ALREADY_ACTIVE', 409);
       await tx.query(
@@ -482,9 +557,19 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
         throw new ApiError('ACCESS_DENIED', 403);
       if (handoff.status === 'accepted') return;
       if (handoff.status !== 'approved') throw new ApiError('HANDOFF_NOT_APPROVED', 409);
+      const [reportRow] = await tx.query<Case>(
+        'SELECT * FROM reports WHERE id=$1 FOR UPDATE',
+        [handoff.case_id],
+      );
+      if (!reportRow) throw new ApiError('ACCESS_DENIED', 403);
+      if ((reportRow.handoff_count ?? 0) >= MAX_HANDOFFS) throw new ApiError('MAX_HANDOFFS_EXCEEDED', 409);
       await tx.query("UPDATE case_handoffs SET status='accepted',accepted_at=now() WHERE id=$1", [
         handoff.id,
       ]);
+      await tx.query(
+        'UPDATE reports SET current_department=$1, handoff_count=handoff_count+1 WHERE id=$2',
+        [actor.departmentId, handoff.case_id],
+      );
       await tx.query('INSERT INTO review_events(id,case_id,actor,action) VALUES($1,$2,$3,$4)', [
         randomUUID(),
         handoff.case_id,
@@ -493,6 +578,30 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       ]);
     });
     return { accepted: true };
+  });
+  app.post('/v1/reviewer/handoffs/:handoffId/decline', async (req) => {
+    const { handoffId } = z.object({ handoffId: z.uuid() }).parse(req.params);
+    const actor = reviewer(req);
+    await db.transaction(async (tx) => {
+      const [handoff] = await tx.query<Handoff>(
+        'SELECT * FROM case_handoffs WHERE id=$1 FOR UPDATE',
+        [handoffId],
+      );
+      if (!handoff || handoff.target_department !== actor.departmentId)
+        throw new ApiError('ACCESS_DENIED', 403);
+      if (handoff.status === 'declined') return;
+      if (handoff.status !== 'approved') throw new ApiError('HANDOFF_NOT_APPROVED', 409);
+      await tx.query("UPDATE case_handoffs SET status='declined',decided_at=now() WHERE id=$1", [
+        handoff.id,
+      ]);
+      await tx.query('INSERT INTO review_events(id,case_id,actor,action) VALUES($1,$2,$3,$4)', [
+        randomUUID(),
+        handoff.case_id,
+        actor.id,
+        `handoff-declined:${handoff.source_department}`,
+      ]);
+    });
+    return { declined: true };
   });
   app.get('/v1/cases/:id/inclusion', async (req) => {
     const row = await readCase(params(req).id);

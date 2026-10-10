@@ -40,6 +40,23 @@ export const TOPIC_DEPARTMENTS: Record<Topic, DepartmentId> = {
   'campus-safety': 'campus-safety',
   other: 'ombuds-office',
 };
+export const MAX_HANDOFFS = 3;
+
+export interface HandoffHistoryItem {
+  id: string;
+  source: string;
+  target: string;
+  status: string;
+  createdAt: string;
+  acceptedAt?: string | null;
+}
+
+export interface PendingHandoffSummary {
+  id: string;
+  targetDepartment: string;
+  target: string;
+  createdAt: string;
+}
 const decimal = z
   .string()
   .regex(/^(0|[1-9][0-9]{0,77})$/)

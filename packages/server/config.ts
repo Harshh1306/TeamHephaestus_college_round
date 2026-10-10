@@ -69,3 +69,10 @@ export function departmentLabel(value: ApiConfig, id: DepartmentId) {
     DEPARTMENT_LABELS[id]
   );
 }
+export function activeDepartmentForCase(
+  value: ApiConfig,
+  row: { current_department?: string | null; topic: Topic | string },
+): DepartmentId {
+  if (row.current_department) return row.current_department as DepartmentId;
+  return departmentForTopic(value, row.topic as Topic);
+}

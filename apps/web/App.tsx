@@ -34,6 +34,7 @@ import {
   privacyWarnings,
   accessVerifierFor,
   receiptBytes,
+  MAX_HANDOFFS,
   type Topic,
   type Envelope,
   type Submission,
@@ -1252,9 +1253,17 @@ function Reviewer() {
   }, [credentials]);
   async function open(c: any) {
     try {
-      const report = JSON.parse(
-        await unseal(c.ciphertext, credentials.publicKey, credentials.privateKey),
-      );
+      let report: { title: string; details: string };
+      try {
+        const raw = await unseal(c.ciphertext, credentials.publicKey, credentials.privateKey);
+        try {
+          report = JSON.parse(raw);
+        } catch {
+          report = { title: `Case ${c.id.slice(0, 8)}`, details: raw };
+        }
+      } catch {
+        report = { title: `Case ${c.id.slice(0, 8)}`, details: 'Unable to decrypt case content.' };
+      }
       setContent(report);
       setSelected(c);
       setSelectedHandoff(undefined);
@@ -1379,23 +1388,42 @@ function Reviewer() {
                   <p>No cases yet. Submit a protected report first.</p>
                 </div>
               )}
-              {cases.map((c) => (
-                <button
-                  className={`case-row ${selected?.id === c.id ? 'selected' : ''}`}
-                  key={c.id}
-                  onClick={() => open(c)}
-                >
-                  <div>
-                    <strong>{TOPIC_LABELS[c.topic]}</strong>
-                    <small>
-                      {c.id.slice(0, 8)} · {new Date(c.createdAt).toLocaleDateString()}
-                    </small>
-                  </div>
-                  <span className="status-badge">{c.status}</span>
-                  {c.reopenRequested && <span className="status-badge">reopen requested</span>}
-                  <ChevronRight size={15} />
-                </button>
-              ))}
+              {cases.map((c) => {
+                const isPending = !!c.pendingHandoff;
+                return (
+                  <button
+                    className={`case-row ${selected?.id === c.id ? 'selected' : ''} ${isPending ? 'pending-handoff' : ''}`}
+                    key={c.id}
+                    onClick={() => open(c)}
+                    title={
+                      isPending
+                        ? `Waiting for handoff acceptance by ${c.pendingHandoff.target}`
+                        : undefined
+                    }
+                  >
+                    <div>
+                      <strong>{TOPIC_LABELS[c.topic]}</strong>
+                      <small>
+                        {c.id.slice(0, 8)} · {new Date(c.createdAt).toLocaleDateString()}
+                      </small>
+                    </div>
+                    {isPending ? (
+                      <span className="status-badge pending">waiting for acceptance</span>
+                    ) : (
+                      <>
+                        <span className="status-badge">{c.status}</span>
+                        {c.reopenRequested && (
+                          <span className="status-badge">reopen requested</span>
+                        )}
+                        {c.handoffCount > 0 && (
+                          <span className="status-badge">handoffs: {c.handoffCount}</span>
+                        )}
+                      </>
+                    )}
+                    <ChevronRight size={15} />
+                  </button>
+                );
+              })}
               <h3 className="handoff-inbox-title">Incoming handoffs</h3>
               {handoffs.length === 0 ? (
                 <p className="caption">
@@ -1431,25 +1459,46 @@ function Reviewer() {
                     report remains with the source department.
                   </Notice>
                   {selectedHandoff.status === 'approved' && (
-                    <button
-                      className="primary"
-                      onClick={async () => {
-                        try {
-                          await api(
-                            `/v1/reviewer/handoffs/${selectedHandoff.id}/accept`,
-                            'POST',
-                            {},
-                            credentials.token,
-                          );
-                          setSelectedHandoff({ ...selectedHandoff, status: 'accepted' });
-                          await load();
-                        } catch (e) {
-                          setError(friendly(e));
-                        }
-                      }}
-                    >
-                      Accept encrypted handoff <Check size={16} />
-                    </button>
+                    <div className="toolbar">
+                      <button
+                        className="primary"
+                        onClick={async () => {
+                          try {
+                            await api(
+                              `/v1/reviewer/handoffs/${selectedHandoff.id}/accept`,
+                              'POST',
+                              {},
+                              credentials.token,
+                            );
+                            setSelectedHandoff(undefined);
+                            await load();
+                          } catch (e) {
+                            setError(friendly(e));
+                          }
+                        }}
+                      >
+                        Accept handoff <Check size={16} />
+                      </button>
+                      <button
+                        className="secondary"
+                        onClick={async () => {
+                          try {
+                            await api(
+                              `/v1/reviewer/handoffs/${selectedHandoff.id}/decline`,
+                              'POST',
+                              {},
+                              credentials.token,
+                            );
+                            setSelectedHandoff(undefined);
+                            await load();
+                          } catch (e) {
+                            setError(friendly(e));
+                          }
+                        }}
+                      >
+                        Decline handoff <X size={16} />
+                      </button>
+                    </div>
                   )}
                 </>
               ) : selected && content ? (
@@ -1473,73 +1522,118 @@ function Reviewer() {
                     </div>
                   </div>
                   <p className="report-text">{content.details}</p>
-                  <Notice>
-                    Member eligibility is verified. Reported allegations require independent
-                    investigation.
-                  </Notice>
-                  <section className="handoff-composer">
-                    <h4>Forward to another department</h4>
-                    <p className="caption">
-                      Share an encrypted, minimum-necessary summary directly with another department.
-                      The original report stays in this department.
-                    </p>
-                    <label>
-                      Destination department
-                      <select
-                        value={handoffTarget}
-                        onChange={(event) => setHandoffTarget(event.target.value)}
-                      >
-                        <option value="">Choose a department</option>
-                        {Object.entries(DEPARTMENT_LABELS)
-                          .filter(([id]) => id !== selected.department)
-                          .map(([id, label]) => (
-                            <option key={id} value={id}>
-                              {label}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <label>
-                      Encrypted handoff summary
-                      <textarea
-                        rows={3}
-                        maxLength={5000}
-                        value={handoffSummary}
-                        onChange={(event) => setHandoffSummary(event.target.value)}
-                        placeholder="Share only what the other department needs to act."
-                      />
-                    </label>
-                    <button
-                      className="secondary small"
-                      disabled={!handoffTarget || !handoffSummary.trim()}
-                      onClick={async () => {
-                        try {
-                          const policy = await getPolicy();
-                          const destination = policy.departments.find(
-                            (department) => department.id === handoffTarget,
-                          );
-                          if (!destination) throw new Error('That department is unavailable.');
-                          const summary = handoffSummary.trim();
-                          await api(
-                            `/v1/reviewer/cases/${selected.id}/handoffs`,
-                            'POST',
-                            {
-                              targetDepartment: destination.id,
-                              summaryCiphertext: await seal(summary, destination.publicKey),
-                            },
-                            credentials.token,
-                          );
-                          setHandoffSummary('');
-                          setHandoffTarget('');
-                          await open(selected);
-                        } catch (e) {
-                          setError(friendly(e));
-                        }
-                      }}
-                    >
-                      Forward to department <ArrowRight size={16} />
-                    </button>
-                  </section>
+                  {selected.pendingHandoff ? (
+                    <Notice>
+                      <strong>Waiting for handoff acceptance.</strong>
+                      <p>
+                        This case was forwarded to {selected.pendingHandoff.target} on{' '}
+                        {new Date(selected.pendingHandoff.createdAt).toLocaleDateString()}. All actions
+                        on this case are locked until the destination department accepts or declines.
+                      </p>
+                    </Notice>
+                  ) : (
+                    <>
+                      <div className="toolbar" style={{ margin: '8px 0' }}>
+                        <div className="handoff-history-badge">
+                          <ArrowRight size={13} />
+                          <span>
+                            Handoffs: {selected.handoffCount || 0} / {MAX_HANDOFFS}
+                          </span>
+                          {selected.handoffHistory?.filter((h: any) => h.status === 'accepted').length > 0 && (
+                            <span>
+                              (Custody:{' '}
+                              {selected.handoffHistory
+                                .filter((h: any) => h.status === 'accepted')
+                                .map((h: any) => `${h.source} → ${h.target}`)
+                                .join(', ')}
+                              )
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Notice>
+                        Member eligibility is verified. Reported allegations require independent
+                        investigation.
+                      </Notice>
+                      {(selected.handoffCount || 0) >= MAX_HANDOFFS ? (
+                        <Notice>
+                          <strong>Maximum handoff limit reached ({MAX_HANDOFFS}).</strong>
+                          <p>
+                            This case has reached the maximum permitted transfers and cannot be forwarded
+                            further.
+                          </p>
+                        </Notice>
+                      ) : (
+                        <section className="handoff-composer">
+                          <h4>Forward to another department</h4>
+                          <p className="caption">
+                            Share an encrypted, minimum-necessary summary directly with another department.
+                            The original report stays in this department until accepted.
+                          </p>
+                          <label>
+                            Destination department
+                            <select
+                              value={handoffTarget}
+                              onChange={(event) => setHandoffTarget(event.target.value)}
+                            >
+                              <option value="">Choose a department</option>
+                              {Object.entries(DEPARTMENT_LABELS)
+                                .filter(([id]) => id !== selected.department)
+                                .map(([id, label]) => (
+                                  <option key={id} value={id}>
+                                    {label}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                          <label>
+                            Encrypted handoff summary
+                            <textarea
+                              rows={3}
+                              maxLength={5000}
+                              value={handoffSummary}
+                              onChange={(event) => setHandoffSummary(event.target.value)}
+                              placeholder="Share only what the other department needs to act."
+                            />
+                          </label>
+                          <button
+                            className="secondary small"
+                            disabled={!handoffTarget || !handoffSummary.trim()}
+                            onClick={async () => {
+                              try {
+                                const policy = await getPolicy();
+                                const destination = policy.departments.find(
+                                  (department) => department.id === handoffTarget,
+                                );
+                                if (!destination) throw new Error('That department is unavailable.');
+                                const summary = handoffSummary.trim();
+                                await api(
+                                  `/v1/reviewer/cases/${selected.id}/handoffs`,
+                                  'POST',
+                                  {
+                                    targetDepartment: destination.id,
+                                    summaryCiphertext: await seal(
+                                      JSON.stringify({
+                                        title: content?.title || `Case ${selected.id.slice(0, 8)}`,
+                                        details: summary,
+                                      }),
+                                      destination.publicKey,
+                                    ),
+                                  },
+                                  credentials.token,
+                                );
+                                setHandoffSummary('');
+                                setHandoffTarget('');
+                                await open(selected);
+                              } catch (e) {
+                                setError(friendly(e));
+                              }
+                            }}
+                          >
+                            Forward to department <ArrowRight size={16} />
+                          </button>
+                        </section>
+                      )}
                   {selected.reopenRequested && (
                     <Notice>
                       <strong>Reporter requested a reopen.</strong>
@@ -1634,7 +1728,9 @@ function Reviewer() {
                     Send encrypted question <ArrowRight size={16} />
                   </button>
                 </>
-              ) : (
+              )}
+            </>
+          ) : (
                 <div className="empty">
                   <LockKeyhole size={36} />
                   <h3>Select a case to decrypt.</h3>

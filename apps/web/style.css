@@ -1097,6 +1097,28 @@ hr {
 .case-row.selected {
   background: #1b2c2a;
 }
+.case-row.pending-handoff {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 3px dashed var(--muted);
+}
+.status-badge.pending {
+  background: #382c16;
+  color: #f6c445;
+  border-color: rgba(246, 196, 69, 0.25);
+}
+.handoff-history-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
 .case-row > div {
   margin-right: auto;
 }
