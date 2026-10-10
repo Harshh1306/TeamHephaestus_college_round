@@ -1,6 +1,7 @@
 import { Group } from '@semaphore-protocol/group';
 import {
   snapshotBytes,
+  type DepartmentId,
   type Snapshot,
   type Submission,
   type Envelope,
@@ -8,7 +9,8 @@ import {
 } from '../../packages/protocol/index';
 export type Policy = {
   period: string;
-  reviewerPublicKey: string;
+  departments: { id: DepartmentId; label: string; publicKey: string }[];
+  topicDepartments: Record<string, DepartmentId>;
   authorityPublicKey: string;
   receiptPublicKey: string;
   snapshot: Snapshot;
@@ -110,6 +112,10 @@ export const friendly = (error: unknown) => {
     CASE_NOT_CLOSED: 'This case is not currently closed.',
     REOPEN_ALREADY_REQUESTED: 'A reopen request is already waiting for reviewer action.',
     CLOSURE_REASON_REQUIRED: 'The reviewer must provide a closure summary.',
+    INVALID_HANDOFF_TARGET: 'Choose a different authorized department for this handoff.',
+    HANDOFF_ALREADY_ACTIVE: 'A handoff to this department is already active for this case.',
+    HANDOFF_ALREADY_DECIDED: 'This handoff already has a recorded decision.',
+    HANDOFF_NOT_APPROVED: 'The reporter must approve this handoff before it can be accepted.',
   };
   return messages[raw] || raw;
 };

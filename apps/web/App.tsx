@@ -29,6 +29,7 @@ import {
   randomHex,
   TOPICS,
   TOPIC_LABELS,
+  DEPARTMENT_LABELS,
   ORGANIZATION,
   privacyWarnings,
   accessVerifierFor,
@@ -669,7 +670,13 @@ function Report({
           slot,
           period: policy.period,
           keyVersion: 1,
-          ciphertext: await seal(JSON.stringify({ title, details }), policy.reviewerPublicKey),
+          ciphertext: await seal(
+            JSON.stringify({ title, details }),
+            policy.departments.find((d) => d.id === policy.topicDepartments[topic])?.publicKey ||
+              (() => {
+                throw new Error('No authorized department is configured for this category.');
+              })(),
+          ),
           accessVerifier: await accessVerifierFor(secret),
           replyPublicKey: replyKeys.publicKey,
           nonce,
@@ -988,7 +995,16 @@ function CasePage({
       await api(
         `/v1/cases/${record.id}/messages`,
         'POST',
-        { id: messageId, ciphertext: await seal(messageText, p.reviewerPublicKey) },
+        {
+          id: messageId,
+          ciphertext: await seal(
+            messageText,
+            p.departments.find((department) => department.id === record.department)?.publicKey ||
+              (() => {
+                throw new Error('The case department is unavailable.');
+              })(),
+          ),
+        },
         vault.secret,
       );
       setText('');
@@ -1081,6 +1097,69 @@ function CasePage({
                   </>
                 )}
               </Notice>
+            )}
+            {record?.handoffs?.length > 0 && (
+              <section className="handoff-status">
+                <h4>Department handoffs</h4>
+                {record.handoffs.map((handoff: any) => (
+                  <Notice key={handoff.id}>
+                    <strong>{handoff.destination}</strong>
+                    <p>
+                      {handoff.status === 'awaiting-reporter-consent'
+                        ? 'Your reviewer requests permission to share an encrypted, minimum-necessary summary.'
+                        : `Handoff ${handoff.status.replaceAll('-', ' ')}.`}
+                    </p>
+                    {handoff.status === 'awaiting-reporter-consent' && (
+                      <div className="toolbar">
+                        <button
+                          className="primary small"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              await api(
+                                `/v1/cases/${record.id}/handoffs/${handoff.id}/decision`,
+                                'POST',
+                                { decision: 'approved' },
+                                vault.secret,
+                              );
+                              await load();
+                            } catch (e) {
+                              setError(friendly(e));
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          Approve handoff
+                        </button>
+                        <button
+                          className="secondary small"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              await api(
+                                `/v1/cases/${record.id}/handoffs/${handoff.id}/decision`,
+                                'POST',
+                                { decision: 'declined' },
+                                vault.secret,
+                              );
+                              await load();
+                            } catch (e) {
+                              setError(friendly(e));
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          Keep private
+                        </button>
+                      </div>
+                    )}
+                  </Notice>
+                ))}
+              </section>
             )}
             {vault.receipt && (
               <>
@@ -1207,15 +1286,24 @@ function Reviewer() {
   const [raw, setRaw] = useState(''),
     [credentials, setCredentials] = useState<any>(),
     [cases, setCases] = useState<any[]>([]),
+    [handoffs, setHandoffs] = useState<any[]>([]),
     [selected, setSelected] = useState<any>(),
+    [selectedHandoff, setSelectedHandoff] = useState<any>(),
     [content, setContent] = useState<any>(),
     [messages, setMessages] = useState<any[]>([]),
     [reply, setReply] = useState(''),
     [closureReason, setClosureReason] = useState(''),
+    [handoffTarget, setHandoffTarget] = useState(''),
+    [handoffSummary, setHandoffSummary] = useState(''),
     [error, setError] = useState('');
   async function load(c = credentials) {
     try {
-      setCases(await api('/v1/reviewer/cases', 'GET', undefined, c.token));
+      const [caseRows, handoffRows] = await Promise.all([
+        api<any[]>('/v1/reviewer/cases', 'GET', undefined, c.token),
+        api<any[]>('/v1/reviewer/handoffs', 'GET', undefined, c.token),
+      ]);
+      setCases(caseRows);
+      setHandoffs(handoffRows);
     } catch (e) {
       setError(friendly(e));
     }
@@ -1232,6 +1320,7 @@ function Reviewer() {
       );
       setContent(report);
       setSelected(c);
+      setSelectedHandoff(undefined);
       const all = await api<any[]>(
         `/v1/reviewer/cases/${c.id}/messages`,
         'GET',
@@ -1249,6 +1338,23 @@ function Reviewer() {
           })),
         ),
       );
+    } catch (e) {
+      setError(friendly(e));
+    }
+  }
+  async function openHandoff(handoff: any) {
+    try {
+      setContent({
+        title: `Handoff from ${handoff.source}`,
+        details: await unseal(
+          handoff.summaryCiphertext,
+          credentials.publicKey,
+          credentials.privateKey,
+        ),
+      });
+      setSelected(undefined);
+      setSelectedHandoff(handoff);
+      setMessages([]);
     } catch (e) {
       setError(friendly(e));
     }
@@ -1292,9 +1398,8 @@ function Reviewer() {
                 const c = JSON.parse(raw);
                 if (!c.token || !c.privateKey || !c.publicKey)
                   throw new Error('Invalid credentials');
-                const rows = await api<any[]>('/v1/reviewer/cases', 'GET', undefined, c.token);
                 setCredentials(c);
-                setCases(rows);
+                await load(c);
                 setRaw('');
               } catch (e) {
                 setError(friendly(e));
@@ -1307,7 +1412,9 @@ function Reviewer() {
       ) : (
         <>
           <div className="toolbar">
-            <span>{cases.length} permitted cases</span>
+            <span>
+              {cases.length} owned cases · {handoffs.length} incoming handoffs
+            </span>
             <button className="secondary" onClick={() => load()}>
               <RefreshCw size={15} /> Refresh
             </button>
@@ -1318,6 +1425,8 @@ function Reviewer() {
                 setSelected(undefined);
                 setContent(undefined);
                 setCases([]);
+                setHandoffs([]);
+                setSelectedHandoff(undefined);
                 setMessages([]);
               }}
             >
@@ -1350,9 +1459,63 @@ function Reviewer() {
                   <ChevronRight size={15} />
                 </button>
               ))}
+              <h3 className="handoff-inbox-title">Incoming handoffs</h3>
+              {handoffs.length === 0 ? (
+                <p className="caption">
+                  Approved encrypted handoffs from other departments appear here.
+                </p>
+              ) : (
+                handoffs.map((handoff) => (
+                  <button
+                    className={`case-row ${selectedHandoff?.id === handoff.id ? 'selected' : ''}`}
+                    key={handoff.id}
+                    onClick={() => openHandoff(handoff)}
+                  >
+                    <div>
+                      <strong>From {handoff.source}</strong>
+                      <small>{TOPIC_LABELS[handoff.topic]}</small>
+                    </div>
+                    <span className="status-badge">{handoff.status}</span>
+                    <ChevronRight size={15} />
+                  </button>
+                ))
+              )}
             </section>
             <section className="panel">
-              {selected && content ? (
+              {selectedHandoff && content ? (
+                <>
+                  <div className="panel-title">
+                    <h3>{content.title}</h3>
+                    <span className="status-badge">{selectedHandoff.status}</span>
+                  </div>
+                  <p className="report-text">{content.details}</p>
+                  <Notice>
+                    This is the reporter-approved, minimum-necessary handoff summary. The original
+                    report remains with the source department.
+                  </Notice>
+                  {selectedHandoff.status === 'approved' && (
+                    <button
+                      className="primary"
+                      onClick={async () => {
+                        try {
+                          await api(
+                            `/v1/reviewer/handoffs/${selectedHandoff.id}/accept`,
+                            'POST',
+                            {},
+                            credentials.token,
+                          );
+                          setSelectedHandoff({ ...selectedHandoff, status: 'accepted' });
+                          await load();
+                        } catch (e) {
+                          setError(friendly(e));
+                        }
+                      }}
+                    >
+                      Accept encrypted handoff <Check size={16} />
+                    </button>
+                  )}
+                </>
+              ) : selected && content ? (
                 <>
                   <div className="panel-title">
                     <h3>{content.title}</h3>
@@ -1362,6 +1525,7 @@ function Reviewer() {
                         className="text-button muted"
                         onClick={() => {
                           setSelected(undefined);
+                          setSelectedHandoff(undefined);
                           setContent(undefined);
                           setMessages([]);
                           setReply('');
@@ -1376,6 +1540,73 @@ function Reviewer() {
                     Member eligibility is verified. Reported allegations require independent
                     investigation.
                   </Notice>
+                  <section className="handoff-composer">
+                    <h4>Forward to another department</h4>
+                    <p className="caption">
+                      The reporter must approve before the destination can decrypt this
+                      minimum-necessary summary. The original report stays in this department.
+                    </p>
+                    <label>
+                      Destination department
+                      <select
+                        value={handoffTarget}
+                        onChange={(event) => setHandoffTarget(event.target.value)}
+                      >
+                        <option value="">Choose a department</option>
+                        {Object.entries(DEPARTMENT_LABELS)
+                          .filter(([id]) => id !== selected.department)
+                          .map(([id, label]) => (
+                            <option key={id} value={id}>
+                              {label}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
+                      Encrypted handoff summary
+                      <textarea
+                        rows={3}
+                        maxLength={5000}
+                        value={handoffSummary}
+                        onChange={(event) => setHandoffSummary(event.target.value)}
+                        placeholder="Share only what the other department needs to act."
+                      />
+                    </label>
+                    <button
+                      className="secondary small"
+                      disabled={!handoffTarget || !handoffSummary.trim()}
+                      onClick={async () => {
+                        try {
+                          const policy = await getPolicy();
+                          const destination = policy.departments.find(
+                            (department) => department.id === handoffTarget,
+                          );
+                          if (!destination) throw new Error('That department is unavailable.');
+                          const summary = handoffSummary.trim();
+                          await api(
+                            `/v1/reviewer/cases/${selected.id}/handoffs`,
+                            'POST',
+                            {
+                              targetDepartment: destination.id,
+                              summaryCiphertext: await seal(summary, destination.publicKey),
+                              reporterNoticeCiphertext: await seal(
+                                `Your reviewer requests permission to share this summary with ${destination.label}: ${summary}`,
+                                selected.replyPublicKey,
+                              ),
+                            },
+                            credentials.token,
+                          );
+                          setHandoffSummary('');
+                          setHandoffTarget('');
+                          await open(selected);
+                        } catch (e) {
+                          setError(friendly(e));
+                        }
+                      }}
+                    >
+                      Request reporter consent <ArrowRight size={16} />
+                    </button>
+                  </section>
                   {selected.reopenRequested && (
                     <Notice>
                       <strong>Reporter requested a reopen.</strong>

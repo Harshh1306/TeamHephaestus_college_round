@@ -35,6 +35,8 @@ export async function migrate(db: DB) {
     `CREATE TABLE IF NOT EXISTS used_nullifiers (organization text NOT NULL, scope text NOT NULL, nullifier text NOT NULL, report_id uuid NOT NULL REFERENCES reports(id), PRIMARY KEY(organization, scope, nullifier))`,
     `CREATE TABLE IF NOT EXISTS case_messages (id uuid PRIMARY KEY, case_id uuid NOT NULL REFERENCES reports(id), direction text NOT NULL CHECK(direction IN ('reporter','reviewer')), ciphertext text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`,
     `CREATE TABLE IF NOT EXISTS review_events (id uuid PRIMARY KEY, case_id uuid NOT NULL REFERENCES reports(id), actor text NOT NULL, action text NOT NULL, created_at timestamptz NOT NULL DEFAULT now())`,
+    `CREATE TABLE IF NOT EXISTS case_handoffs (id uuid PRIMARY KEY, case_id uuid NOT NULL REFERENCES reports(id), source_department text NOT NULL, target_department text NOT NULL, summary_ciphertext text NOT NULL, status text NOT NULL CHECK(status IN ('awaiting-reporter-consent','approved','declined','accepted','cancelled')), requester_id text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), decided_at timestamptz, accepted_at timestamptz)`,
+    `CREATE INDEX IF NOT EXISTS case_handoffs_target_status_created_idx ON case_handoffs(target_department,status,created_at DESC)`,
     `CREATE TABLE IF NOT EXISTS audit_batches (id uuid PRIMARY KEY, root text NOT NULL, leaves jsonb NOT NULL, transaction_hash text, created_at timestamptz NOT NULL DEFAULT now())`,
   ])
     await db.query(query);

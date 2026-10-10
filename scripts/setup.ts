@@ -3,7 +3,15 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { Identity } from '@semaphore-protocol/identity';
 import { Group } from '@semaphore-protocol/group';
 import { keypair } from '../packages/crypto/index';
-import { randomHex, ORGANIZATION, GROUP, TOPICS, snapshotBytes } from '../packages/protocol/index';
+import {
+  randomHex,
+  ORGANIZATION,
+  GROUP,
+  DEPARTMENTS,
+  DEPARTMENT_LABELS,
+  TOPIC_DEPARTMENTS,
+  snapshotBytes,
+} from '../packages/protocol/index';
 import { signText } from '../packages/server/signatures';
 import { hashPassword } from '../packages/server/passwords';
 try {
@@ -39,6 +47,7 @@ try {
 }
 await mkdir('.local/authority', { recursive: true });
 await mkdir('.local/reviewer', { recursive: true });
+await mkdir('.local/reviewers', { recursive: true });
 const authority = generateKeyPairSync('ed25519'),
   receipt = generateKeyPairSync('ed25519');
 const pem = (k: any, type: 'pkcs8' | 'spki') => k.export({ type, format: 'pem' }).toString();
@@ -67,8 +76,19 @@ const snapshot = {
   ...s,
   signature: signText(snapshotBytes(s), pem(authority.privateKey, 'pkcs8')),
 };
-const reviewer = await keypair(),
-  reviewerToken = randomHex();
+const departmentKeys = await Promise.all(
+  DEPARTMENTS.map(async (id) => ({ id, label: DEPARTMENT_LABELS[id], ...(await keypair()) })),
+);
+const reviewers = departmentKeys.flatMap((department) =>
+  [1, 2].map((number) => ({
+    id: `${department.id}-reviewer-${number}`,
+    name: `${department.label} reviewer ${number}`,
+    departmentId: department.id,
+    token: randomHex(),
+    publicKey: department.publicKey,
+    privateKey: department.privateKey,
+  })),
+);
 await writeFile(
   '.local/authority/ledger.json',
   JSON.stringify(
@@ -89,18 +109,36 @@ await writeFile(
       authorityPublicKey: pem(authority.publicKey, 'spki'),
       receiptPrivateKey: pem(receipt.privateKey, 'pkcs8'),
       receiptPublicKey: pem(receipt.publicKey, 'spki'),
-      reviewerPublicKey: reviewer.publicKey,
-      reviewerToken,
-      reviewerTopics: TOPICS,
+      departments: departmentKeys.map(({ id, label, publicKey }) => ({ id, label, publicKey })),
+      reviewers: reviewers.map(({ id, name, departmentId, token }) => ({
+        id,
+        name,
+        departmentId,
+        token,
+      })),
+      topicDepartments: TOPIC_DEPARTMENTS,
       snapshot,
     },
     null,
     2,
   ),
 );
+await Promise.all(
+  reviewers.map(({ id, name, departmentId, publicKey, privateKey, token }) =>
+    writeFile(
+      `.local/reviewers/${id}.json`,
+      JSON.stringify({ id, name, departmentId, publicKey, privateKey, token }, null, 2),
+    ),
+  ),
+);
+// Convenience path for the initial demo flow: this reviewer owns the default Infrastructure category.
 await writeFile(
   '.local/reviewer/credentials.json',
-  JSON.stringify({ ...reviewer, token: reviewerToken }, null, 2),
+  JSON.stringify(
+    reviewers.find((reviewer) => reviewer.departmentId === 'facilities'),
+    null,
+    2,
+  ),
 );
 await writeFile(
   '.local/demo-credentials.json',
@@ -110,6 +148,7 @@ await writeFile(
       members,
       enrollment: roster.slice(3).map((m) => ({ rollNumber: m.id, password: m.password })),
       reviewerFile: '.local/reviewer/credentials.json',
+      reviewerFiles: reviewers.map((reviewer) => `.local/reviewers/${reviewer.id}.json`),
     },
     null,
     2,
@@ -117,6 +156,6 @@ await writeFile(
 );
 console.log('Created 3 synthetic members and 21 unused roll-number/password accounts.');
 console.log(
-  'Demo credentials: .local/demo-credentials.json; reviewer keys: .local/reviewer/credentials.json',
+  'Demo credentials: .local/demo-credentials.json; reviewer keys: .local/reviewers/*.json',
 );
 console.log('No private reviewer or member key is in the reporting configuration.');

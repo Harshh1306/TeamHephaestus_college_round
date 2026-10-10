@@ -35,7 +35,9 @@ Source: the final message of the [shared blueprint](https://chatgpt.com/share/6a
 - [x] Local identifying-content pattern warnings.
 - [ ] OIDC/MFA, session lifetime, reviewer identity management and independently deployed portals.
 - [ ] Encrypted evidence storage, metadata review and isolated safe attachment viewing.
-- [ ] Conflict-of-interest routing with separate recipient keys and approval workflow.
+- [x] Consent-gated interdepartmental routing with separate department recipient keys, encrypted
+      minimum-necessary summaries, reporter approval/decline, destination acknowledgement and audit
+      events.
 - [ ] Protected notes, richer moderation, inbox pagination and controlled credential recovery.
 
 ## M4 — Blockchain and innovation: local chain verified

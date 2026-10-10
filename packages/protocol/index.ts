@@ -18,6 +18,28 @@ export const TOPIC_LABELS: Record<string, string> = {
   'campus-safety': 'Campus safety',
   other: 'Other concern',
 };
+export const DEPARTMENTS = [
+  'academic-affairs',
+  'student-services',
+  'facilities',
+  'campus-safety',
+  'ombuds-office',
+] as const;
+export type DepartmentId = (typeof DEPARTMENTS)[number];
+export const DEPARTMENT_LABELS: Record<DepartmentId, string> = {
+  'academic-affairs': 'Academic Affairs',
+  'student-services': 'Student Services',
+  facilities: 'Facilities',
+  'campus-safety': 'Campus Safety',
+  'ombuds-office': 'Ombuds Office',
+};
+export const TOPIC_DEPARTMENTS: Record<Topic, DepartmentId> = {
+  'faculty-conduct': 'academic-affairs',
+  administration: 'student-services',
+  infrastructure: 'facilities',
+  'campus-safety': 'campus-safety',
+  other: 'ombuds-office',
+};
 const decimal = z
   .string()
   .regex(/^(0|[1-9][0-9]{0,77})$/)
