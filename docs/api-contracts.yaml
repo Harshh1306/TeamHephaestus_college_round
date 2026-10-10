@@ -177,26 +177,6 @@ paths:
       responses:
         '201': { description: Encrypted reporter reply stored }
         '409': { description: Duplicate message UUID }
-  /v1/cases/{id}/handoffs/{handoffId}/decision:
-    parameters:
-      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-      - { name: handoffId, in: path, required: true, schema: { type: string, format: uuid } }
-    post:
-      description: Reporter approves or declines a proposed interdepartmental summary handoff.
-      security: [{ caseSecret: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [decision]
-              properties:
-                decision: { enum: [approved, declined] }
-      responses:
-        '200': { description: Decision recorded in the case audit event log }
-        '409': { description: HANDOFF_ALREADY_DECIDED }
   /v1/cases/{id}/inclusion:
     parameters:
       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -264,8 +244,8 @@ paths:
       - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
     post:
       description: >-
-        Owning-department reviewer proposes a handoff. Both ciphertexts are created in the
-        browser: the destination summary and the reporter's consent notice.
+        Owning-department reviewer proposes a handoff. An encrypted minimum-necessary
+        summary is created in the browser for the destination department.
       security: [{ reviewer: [] }]
       requestBody:
         required: true
@@ -274,15 +254,13 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [targetDepartment, summaryCiphertext, reporterNoticeCiphertext]
+              required: [targetDepartment, summaryCiphertext]
               properties:
                 targetDepartment: { type: string }
                 summaryCiphertext:
                   { type: string, description: Base64 encrypted to destination department }
-                reporterNoticeCiphertext:
-                  { type: string, description: Base64 encrypted to the case reply key }
       responses:
-        '201': { description: Handoff awaits anonymous reporter consent }
+        '201': { description: Handoff created and pending destination acceptance }
         '409': { description: HANDOFF_ALREADY_ACTIVE }
   /v1/reviewer/handoffs:
     get:

@@ -1098,69 +1098,6 @@ function CasePage({
                 )}
               </Notice>
             )}
-            {record?.handoffs?.length > 0 && (
-              <section className="handoff-status">
-                <h4>Department handoffs</h4>
-                {record.handoffs.map((handoff: any) => (
-                  <Notice key={handoff.id}>
-                    <strong>{handoff.destination}</strong>
-                    <p>
-                      {handoff.status === 'awaiting-reporter-consent'
-                        ? 'Your reviewer requests permission to share an encrypted, minimum-necessary summary.'
-                        : `Handoff ${handoff.status.replaceAll('-', ' ')}.`}
-                    </p>
-                    {handoff.status === 'awaiting-reporter-consent' && (
-                      <div className="toolbar">
-                        <button
-                          className="primary small"
-                          disabled={busy}
-                          onClick={async () => {
-                            setBusy(true);
-                            try {
-                              await api(
-                                `/v1/cases/${record.id}/handoffs/${handoff.id}/decision`,
-                                'POST',
-                                { decision: 'approved' },
-                                vault.secret,
-                              );
-                              await load();
-                            } catch (e) {
-                              setError(friendly(e));
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                        >
-                          Approve handoff
-                        </button>
-                        <button
-                          className="secondary small"
-                          disabled={busy}
-                          onClick={async () => {
-                            setBusy(true);
-                            try {
-                              await api(
-                                `/v1/cases/${record.id}/handoffs/${handoff.id}/decision`,
-                                'POST',
-                                { decision: 'declined' },
-                                vault.secret,
-                              );
-                              await load();
-                            } catch (e) {
-                              setError(friendly(e));
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                        >
-                          Keep private
-                        </button>
-                      </div>
-                    )}
-                  </Notice>
-                ))}
-              </section>
-            )}
             {vault.receipt && (
               <>
                 <label>
@@ -1490,7 +1427,7 @@ function Reviewer() {
                   </div>
                   <p className="report-text">{content.details}</p>
                   <Notice>
-                    This is the reporter-approved, minimum-necessary handoff summary. The original
+                    This is an encrypted, minimum-necessary handoff summary. The original
                     report remains with the source department.
                   </Notice>
                   {selectedHandoff.status === 'approved' && (
@@ -1543,8 +1480,8 @@ function Reviewer() {
                   <section className="handoff-composer">
                     <h4>Forward to another department</h4>
                     <p className="caption">
-                      The reporter must approve before the destination can decrypt this
-                      minimum-necessary summary. The original report stays in this department.
+                      Share an encrypted, minimum-necessary summary directly with another department.
+                      The original report stays in this department.
                     </p>
                     <label>
                       Destination department
@@ -1589,10 +1526,6 @@ function Reviewer() {
                             {
                               targetDepartment: destination.id,
                               summaryCiphertext: await seal(summary, destination.publicKey),
-                              reporterNoticeCiphertext: await seal(
-                                `Your reviewer requests permission to share this summary with ${destination.label}: ${summary}`,
-                                selected.replyPublicKey,
-                              ),
                             },
                             credentials.token,
                           );
@@ -1604,7 +1537,7 @@ function Reviewer() {
                         }
                       }}
                     >
-                      Request reporter consent <ArrowRight size={16} />
+                      Forward to department <ArrowRight size={16} />
                     </button>
                   </section>
                   {selected.reopenRequested && (

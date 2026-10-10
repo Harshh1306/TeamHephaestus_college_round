@@ -18,8 +18,8 @@ const pem = (key: any, type: 'pkcs8' | 'spki') => key.export({ type, format: 'pe
 const token = (character: string) => character.repeat(64);
 const ciphertext = 'A'.repeat(64);
 
-describe('consent-gated interdepartmental handoffs', () => {
-  test('keeps the original case private while a target department receives an approved summary', async () => {
+describe('interdepartmental handoffs', () => {
+  test('keeps the original case private while a target department receives a forwarded summary', async () => {
     const authority = generateKeyPairSync('ed25519');
     const receipt = generateKeyPairSync('ed25519');
     const members = ['handoff-alice', 'handoff-bob', 'handoff-carol'].map((secret) =>
@@ -114,14 +114,10 @@ describe('consent-gated interdepartmental handoffs', () => {
         payload: {
           targetDepartment: 'student-services',
           summaryCiphertext: ciphertext,
-          reporterNoticeCiphertext: ciphertext,
         },
       });
       expect(created.statusCode).toBe(201);
       const handoffId = created.json().id;
-      expect(
-        (await app.inject({ url: '/v1/reviewer/handoffs', headers: targetHeaders })).json(),
-      ).toEqual([]);
 
       const reporterView = await app.inject({
         url: `/v1/cases/${caseId}`,
@@ -129,21 +125,8 @@ describe('consent-gated interdepartmental handoffs', () => {
       });
       expect(reporterView.statusCode).toBe(200);
       expect(reporterView.body).not.toContain('A'.repeat(20));
-      expect(reporterView.json().handoffs[0]).toMatchObject({
-        destination: 'Student Services',
-        status: 'awaiting-reporter-consent',
-      });
+      expect(reporterView.json().handoffs).toBeUndefined();
 
-      expect(
-        (
-          await app.inject({
-            method: 'POST',
-            url: `/v1/cases/${caseId}/handoffs/${handoffId}/decision`,
-            headers: { authorization: `Bearer ${secret}` },
-            payload: { decision: 'approved' },
-          })
-        ).statusCode,
-      ).toBe(200);
       const targetInbox = await app.inject({
         url: '/v1/reviewer/handoffs',
         headers: targetHeaders,
@@ -174,10 +157,6 @@ describe('consent-gated interdepartmental handoffs', () => {
           expect.objectContaining({
             actor: 'facilities-one',
             action: 'handoff-requested:student-services',
-          }),
-          expect.objectContaining({
-            actor: 'anonymous-reporter',
-            action: 'handoff-approved:student-services',
           }),
           expect.objectContaining({ actor: 'services-one', action: 'handoff-accepted:facilities' }),
         ]),

@@ -318,10 +318,6 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
   app.get('/v1/cases/:id', async (req) => {
     const row = await readCase(params(req).id);
     await reporter(req, row);
-    const handoffs = await db.query<Handoff>(
-      'SELECT * FROM case_handoffs WHERE case_id=$1 ORDER BY created_at DESC',
-      [row.id],
-    );
     return {
       id: row.id,
       topic: row.topic,
@@ -330,12 +326,6 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       reopenRequested: row.reopen_requested,
       reopenReason: row.reopen_reason,
       receipt: row.receipt,
-      handoffs: handoffs.map((handoff) => ({
-        id: handoff.id,
-        destination: departmentLabel(config, handoff.target_department as any),
-        status: handoff.status,
-        createdAt: handoff.created_at,
-      })),
     };
   });
   app.post('/v1/cases/access', async (req) => {
@@ -358,17 +348,6 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       reopenRequested: row.reopen_requested,
       reopenReason: row.reopen_reason,
       receipt: row.receipt,
-      handoffs: (
-        await db.query<Handoff>(
-          'SELECT * FROM case_handoffs WHERE case_id=$1 ORDER BY created_at DESC',
-          [row.id],
-        )
-      ).map((handoff) => ({
-        id: handoff.id,
-        destination: departmentLabel(config, handoff.target_department as any),
-        status: handoff.status,
-        createdAt: handoff.created_at,
-      })),
     };
   });
   for (const role of ['reviewer', 'reporter'] as const) {
@@ -435,7 +414,6 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       .object({
         targetDepartment: z.string(),
         summaryCiphertext: ciphertext,
-        reporterNoticeCiphertext: ciphertext,
       })
       .strict()
       .parse(req.body);
@@ -449,7 +427,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
       if (!locked) throw new ApiError('ACCESS_DENIED', 403);
       reviewer(req, locked.topic);
       const existing = await tx.query<{ id: string }>(
-        "SELECT id FROM case_handoffs WHERE case_id=$1 AND target_department=$2 AND status IN ('awaiting-reporter-consent','approved','accepted')",
+        "SELECT id FROM case_handoffs WHERE case_id=$1 AND target_department=$2 AND status IN ('approved','accepted')",
         [id, target.id],
       );
       if (existing.length) throw new ApiError('HANDOFF_ALREADY_ACTIVE', 409);
@@ -461,14 +439,9 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
           actor.departmentId,
           target.id,
           data.summaryCiphertext,
-          'awaiting-reporter-consent',
+          'approved',
           actor.id,
         ],
-      );
-      // The reporter receives a locally decryptable notice; the API never sees the summary text.
-      await tx.query(
-        'INSERT INTO case_messages(id,case_id,direction,ciphertext) VALUES($1,$2,$3,$4)',
-        [randomUUID(), id, 'reviewer', data.reporterNoticeCiphertext],
       );
       await tx.query('INSERT INTO review_events(id,case_id,actor,action) VALUES($1,$2,$3,$4)', [
         randomUUID(),
@@ -477,37 +450,7 @@ export async function createApp(db: DB, config: ApiConfig, now = () => new Date(
         `handoff-requested:${target.id}`,
       ]);
     });
-    return reply.code(201).send({ id: handoffId, status: 'awaiting-reporter-consent' });
-  });
-  app.post('/v1/cases/:id/handoffs/:handoffId/decision', async (req) => {
-    const { id, handoffId } = handoffParams(req);
-    const { decision } = z
-      .object({ decision: z.enum(['approved', 'declined']) })
-      .strict()
-      .parse(req.body);
-    await db.transaction(async (tx) => {
-      const [row] = await tx.query<Case>('SELECT * FROM reports WHERE id=$1 FOR UPDATE', [id]);
-      if (!row) throw new ApiError('ACCESS_DENIED', 403);
-      await reporter(req, row);
-      const [handoff] = await tx.query<Handoff>(
-        'SELECT * FROM case_handoffs WHERE id=$1 AND case_id=$2 FOR UPDATE',
-        [handoffId, id],
-      );
-      if (!handoff) throw new ApiError('ACCESS_DENIED', 403);
-      if (handoff.status !== 'awaiting-reporter-consent')
-        throw new ApiError('HANDOFF_ALREADY_DECIDED', 409);
-      await tx.query('UPDATE case_handoffs SET status=$1,decided_at=now() WHERE id=$2', [
-        decision,
-        handoff.id,
-      ]);
-      await tx.query('INSERT INTO review_events(id,case_id,actor,action) VALUES($1,$2,$3,$4)', [
-        randomUUID(),
-        id,
-        'anonymous-reporter',
-        `handoff-${decision}:${handoff.target_department}`,
-      ]);
-    });
-    return { updated: true };
+    return reply.code(201).send({ id: handoffId, status: 'approved' });
   });
   app.get('/v1/reviewer/handoffs', async (req) => {
     const actor = reviewer(req);
